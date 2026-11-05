@@ -8,7 +8,7 @@
 <link rel="icon" href="/icon.svg">
 <link rel="stylesheet" href="/app/app.css">
 <style>
-.hero{padding:3rem 0 2rem;max-width:700px}.hero h1{font-size:2.2rem;line-height:1.15;margin:0 0 .8rem}.hero p{font-size:1.15rem;color:var(--muted)}
+.hero{padding:3rem 0 2rem;max-width:700px}.demo{margin:0 0 2.5rem;max-width:960px}.demo video{width:100%;height:auto;border-radius:12px;border:1px solid var(--line,#223)}.hero h1{font-size:2.2rem;line-height:1.15;margin:0 0 .8rem}.hero p{font-size:1.15rem;color:var(--muted)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.8rem;margin:1.5rem 0}
 .price{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.8rem}.price .card b{font-size:1.6rem;display:block}
 footer{color:var(--muted);font-size:.85rem;padding:2rem 0;border-top:1px solid var(--line);margin-top:2rem}
@@ -21,6 +21,13 @@ footer{color:var(--muted);font-size:.85rem;padding:2rem 0;border-top:1px solid v
   <h1>Which batch did that jar come from? Answer in five seconds, not an afternoon.</h1>
   <p>LotLedger is the batch record for people who make things in a kitchen, a mill room or a garage and sell them at markets and online. Every lot, every best-by, every unit out, in one place you can open on your phone.</p>
   <p><a class="btn primary" href="/app/#signup">Start free, 30 days, no card</a> &nbsp; <a class="btn" href="#how">See how it works</a></p>
+</section>
+
+<section class="demo">
+  <video controls playsinline preload="none" poster="/media/poster-wide.jpg" width="1920" height="1080">
+    <source src="/media/lotledger-demo-wide.mp4" type="video/mp4">
+  </video>
+  <p class="muted small">33 seconds. Log a batch, record units out, export the Pirate Ship file.</p>
 </section>
 
 <section class="grid" id="how">
