@@ -3,6 +3,6 @@
   "compatibility_date": "2026-10-01",
   "pages_build_output_dir": "public",
   "d1_databases": [
-    { "binding": "DB", "database_name": "lotledger-db", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "lotledger-db", "database_id": "3f2dba5d-36ef-497e-a743-71c163d5d157", "migrations_dir": "migrations" }
   ]
 }
