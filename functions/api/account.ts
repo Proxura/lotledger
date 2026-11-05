@@ -4,7 +4,7 @@ export const onRequestPatch = handle(async (ctx) => {
   const s = await requireSession(ctx);
   const body = await readJson<{ name?: string; lot_prefix?: string; lot_next?: number; lot_step?: number }>(ctx.request);
   const name = str(body.name, 120);
-  const prefix = str(body.lot_prefix, 8).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const prefix = str(body.lot_prefix, 8).toUpperCase().replace(/[^A-Z0-9.-]/g, '');
   const next = int(body.lot_next);
   const step = int(body.lot_step);
   if (step !== null && (step < 1 || step > 1000)) return bad('Lot step must be between 1 and 1000.');
