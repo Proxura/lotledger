@@ -1,0 +1,231 @@
+/* LotLedger app. Plain JS, no build step. Talks to /api/*. */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const state = { me: null, products: [], lots: [], orders: [], view: 'lots' };
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { headers: { 'content-type': 'application/json' }, credentials: 'same-origin', ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const ct = res.headers.get('content-type') || '';
+  const data = ct.includes('json') ? await res.json() : await res.text();
+  if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (${res.status})`), { status: res.status, data });
+  return data;
+}
+function toast(msg, bad = false) { const t = $('#toast'); t.textContent = msg; t.className = 'toast' + (bad ? ' bad' : ''); t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), 3200); }
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const today = () => new Date().toISOString().slice(0, 10);
+const fmtDate = (d) => (d ? new Date(d + (d.length === 10 ? 'T00:00:00' : '')).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+
+/* ---------- dialog helper: returns form values or null ---------- */
+function dialog(title, fieldsHtml, submitLabel = 'Save') {
+  return new Promise((resolve) => {
+    const dlg = $('#dlg'); const form = $('#dlg-form');
+    form.innerHTML = `<h2>${esc(title)}</h2>${fieldsHtml}<p class="err" id="dlg-err"></p><div class="dlg-actions"><button type="button" id="dlg-cancel">Cancel</button><button class="primary" type="submit">${esc(submitLabel)}</button></div>`;
+    const done = (v) => { dlg.close(); resolve(v); };
+    $('#dlg-cancel', form).onclick = () => done(null);
+    form.onsubmit = (e) => { e.preventDefault(); const fd = new FormData(form); done(Object.fromEntries(fd.entries())); };
+    dlg.onclose = () => resolve(null);
+    dlg.showModal();
+    const first = form.querySelector('input,select,textarea'); if (first) first.focus();
+  });
+}
+
+/* ---------- auth ---------- */
+async function boot() {
+  state.me = await api('/api/me');
+  if (!state.me.signedIn) return showAuth();
+  $('#auth').hidden = true; $('#nav').hidden = false;
+  $('#acct').hidden = false; $('#acct').textContent = `${state.me.account.name} · ${planLabel()}`;
+  if (new URLSearchParams(location.search).get('paid') === '1') { toast('Payment received. Thank you.'); history.replaceState(null, '', '/app/'); }
+  await Promise.all([loadProducts(), loadLots()]);
+  show(state.view);
+}
+function planLabel() {
+  const a = state.me.account; if (!a) return '';
+  if (a.plan === 'trial') { const days = Math.max(0, Math.ceil((new Date(a.trial_ends_at) - Date.now()) / 86400000)); return days ? `trial, ${days} day${days === 1 ? '' : 's'} left` : 'trial ended'; }
+  return a.plan;
+}
+function showAuth() {
+  $('#auth').hidden = false; $('#nav').hidden = true; $('#acct').hidden = true; $$('.view').forEach((v) => (v.hidden = true));
+  const signup = location.hash === '#signup';
+  $('#auth-title').textContent = signup ? 'Create your account' : 'Sign in';
+  $('#auth-form [name=business]').parentElement.hidden = !signup;
+  $('#auth-form button').textContent = signup ? 'Start free trial' : 'Sign in';
+  $('#auth-switch').innerHTML = signup ? 'Already have an account? <a href="#signin">Sign in</a>.' : 'New here? <a href="#signup">Create an account</a>. Free for 30 days, no card.';
+}
+window.addEventListener('hashchange', () => { if (!state.me?.signedIn) showAuth(); });
+$('#auth-form').addEventListener('submit', async (e) => {
+  e.preventDefault(); $('#auth-err').textContent = '';
+  const fd = Object.fromEntries(new FormData(e.target).entries());
+  try { await api(location.hash === '#signup' ? '/api/auth/signup' : '/api/auth/login', { method: 'POST', body: fd }); location.hash = ''; await boot(); }
+  catch (err) { $('#auth-err').textContent = err.message; }
+});
+$('#btn-logout').onclick = async () => { await api('/api/auth/logout', { method: 'POST' }); location.reload(); };
+
+/* ---------- navigation ---------- */
+$$('#nav button').forEach((b) => (b.onclick = () => show(b.dataset.view)));
+async function show(view) {
+  state.view = view;
+  $$('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
+  $$('.view').forEach((v) => (v.hidden = v.id !== `view-${view}`));
+  if (view === 'lots') { await loadLots(); renderLots(); }
+  if (view === 'products') { await loadProducts(); renderProducts(); }
+  if (view === 'orders') { await loadOrders(); renderOrders(); }
+  if (view === 'account') renderAccount();
+}
+
+/* ---------- products ---------- */
+async function loadProducts() { state.products = (await api('/api/products')).products; }
+function renderProducts() {
+  const el = $('#products-list');
+  if (!state.products.length) { el.innerHTML = '<div class="empty">Add your first product. A product is anything you make in batches.</div>'; return; }
+  el.innerHTML = state.products.map((p) => `<div class="item">
+    <div><div class="t">${esc(p.name)}${p.active ? '' : '<span class="tag">archived</span>'}</div>
+    <div class="s">${p.active_lots} active lot${p.active_lots === 1 ? '' : 's'} · ${p.units_on_hand} ${esc(p.unit_label)}${p.units_on_hand === 1 ? '' : 's'} on hand${p.shelf_life_days ? ` · best by ${p.shelf_life_days} days after made` : ''}</div></div>
+    <div class="actions"><button class="small" data-edit="${p.id}">Edit</button><button class="small" data-lot-for="${p.id}">Log batch</button></div></div>`).join('');
+  $$('[data-edit]', el).forEach((b) => (b.onclick = () => editProduct(state.products.find((p) => p.id === b.dataset.edit))));
+  $$('[data-lot-for]', el).forEach((b) => (b.onclick = () => newLot(b.dataset.lotFor)));
+}
+const productFields = (p = {}) => `
+  <label>Name <input name="name" required value="${esc(p.name || '')}" placeholder="Fresh Milled Flour"></label>
+  <label>Unit (bag, jar, tube, loaf) <input name="unit_label" value="${esc(p.unit_label || 'unit')}"></label>
+  <label>Shelf life in days (optional; fills best-by automatically) <input name="shelf_life_days" type="number" min="1" max="3650" value="${p.shelf_life_days ?? ''}"></label>`;
+$('#btn-new-product').onclick = async () => {
+  const v = await dialog('New product', productFields(), 'Add'); if (!v) return;
+  try { await api('/api/products', { method: 'POST', body: { ...v, shelf_life_days: v.shelf_life_days ? Number(v.shelf_life_days) : null } }); toast('Product added'); await loadProducts(); renderProducts(); } catch (e) { toast(e.message, true); }
+};
+async function editProduct(p) {
+  const v = await dialog('Edit product', productFields(p) + `<label><span>Status</span><select name="active"><option value="1" ${p.active ? 'selected' : ''}>Active</option><option value="0" ${!p.active ? 'selected' : ''}>Archived</option></select></label>`); if (!v) return;
+  try { await api('/api/products', { method: 'PATCH', body: { id: p.id, name: v.name, unit_label: v.unit_label, shelf_life_days: v.shelf_life_days ? Number(v.shelf_life_days) : null, active: v.active === '1' } }); toast('Saved'); await loadProducts(); renderProducts(); } catch (e) { toast(e.message, true); }
+}
+
+/* ---------- lots ---------- */
+async function loadLots() { const r = await api(`/api/lots?status=${encodeURIComponent($('#lot-filter').value)}`); state.lots = r.lots; }
+$('#lot-filter').onchange = async () => { await loadLots(); renderLots(); };
+function renderLots() {
+  const lots = state.lots;
+  const active = lots.filter((l) => l.status === 'active');
+  const soon = lots.filter((l) => l.sell_soon && l.status === 'active').length;
+  const expired = lots.filter((l) => l.expired && l.status === 'active').length;
+  const onHand = active.reduce((n, l) => n + l.units_left, 0);
+  $('#kpis').innerHTML = `<div class="kpi"><b>${active.length}</b>active lots</div><div class="kpi"><b>${onHand}</b>units on hand</div><div class="kpi ${soon ? 'warn' : ''}"><b>${soon}</b>sell soon (30 days)</div><div class="kpi ${expired ? 'bad' : ''}"><b>${expired}</b>past best-by</div>`;
+  const el = $('#lots-list');
+  if (!lots.length) { el.innerHTML = `<div class="empty">${state.products.length ? 'No lots here yet. Log a batch when you make one.' : 'Add a product first, then log your first batch.'}</div>`; return; }
+  el.innerHTML = lots.map((l) => {
+    const pct = l.units_made ? Math.round((l.units_left / l.units_made) * 100) : 0;
+    const tag = l.status === 'hold' ? '<span class="tag bad">on hold</span>' : l.status === 'sold_out' ? '<span class="tag">sold out</span>' : l.status === 'retired' ? '<span class="tag">retired</span>' : l.expired ? '<span class="tag bad">past best-by</span>' : l.sell_soon ? '<span class="tag warn">sell soon</span>' : '<span class="tag ok">good</span>';
+    return `<div class="item">
+      <div><div class="t">${esc(l.code)} · ${esc(l.product_name)}${tag}</div>
+      <div class="s">Made ${fmtDate(l.made_at)}${l.best_by ? ` · best by ${fmtDate(l.best_by)}` : ''} · ${l.units_left} of ${l.units_made} ${esc(l.unit_label)}${l.units_made === 1 ? '' : 's'} left${l.unit_size ? ` · ${esc(l.unit_size)}` : ''}${l.supplier ? ` · from ${esc(l.supplier)}` : ''}</div></div>
+      <div class="actions"><button class="small primary" data-move="${l.id}">Units out</button><button class="small" data-open="${l.id}">Details</button></div>
+      <div class="bar"><i style="width:${pct}%"></i></div></div>`;
+  }).join('');
+  $$('[data-move]', el).forEach((b) => (b.onclick = () => moveUnits(state.lots.find((l) => l.id === b.dataset.move))));
+  $$('[data-open]', el).forEach((b) => (b.onclick = () => lotDetails(b.dataset.open)));
+}
+$('#btn-new-lot').onclick = () => newLot();
+async function newLot(productId) {
+  if (!state.products.filter((p) => p.active).length) { toast('Add a product first', true); return show('products'); }
+  const opts = state.products.filter((p) => p.active).map((p) => `<option value="${p.id}" ${p.id === productId ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  const v = await dialog('Log a batch', `
+    <label>Product <select name="product_id">${opts}</select></label>
+    <label>Made on <input name="made_at" type="date" value="${today()}" required></label>
+    <label>Units made <input name="units_made" type="number" min="0" required inputmode="numeric"></label>
+    <label>Unit size (2 lb, 4 oz) <input name="unit_size"></label>
+    <label>Best by (leave blank to use the product's shelf life) <input name="best_by" type="date"></label>
+    <label>Lot code (leave blank to number it automatically) <input name="code" style="text-transform:uppercase"></label>
+    <label>Supplier / source <input name="supplier"></label>
+    <label>What went in <textarea name="inputs" placeholder="50 lb organic hard red wheat, Lot 2211 from Janie's Mill"></textarea></label>
+    <label>Notes <textarea name="notes"></textarea></label>`, 'Log batch');
+  if (!v) return;
+  try { const r = await api('/api/lots', { method: 'POST', body: { ...v, units_made: Number(v.units_made) } }); toast(`Logged ${r.code}`); await loadLots(); renderLots(); await loadProducts(); } catch (e) { toast(e.message, true); }
+}
+async function moveUnits(l) {
+  const v = await dialog(`${l.code}: units out`, `
+    <p class="muted small">${l.units_left} ${esc(l.unit_label)}${l.units_left === 1 ? '' : 's'} left in this lot.</p>
+    <label>What happened <select name="kind"><option value="sale">Online sale</option><option value="market">Market sale</option><option value="sample">Sample or gift</option><option value="shrink">Shrink, damage, personal use</option><option value="return">Returned to stock</option><option value="recount">Recount (enter what is physically on hand)</option></select></label>
+    <label>Units <input name="units" type="number" min="1" required inputmode="numeric"></label>
+    <label>Order or note (optional) <input name="note"></label>`, 'Record');
+  if (!v) return;
+  try { await api(`/api/lots/${l.id}`, { method: 'PATCH', body: { move: { kind: v.kind, units: Number(v.units), note: v.note, order_ref: v.kind === 'sale' ? v.note : '' } } }); toast('Recorded'); await loadLots(); renderLots(); } catch (e) { toast(e.message, true); }
+}
+async function lotDetails(id) {
+  const { lot, moves } = await api(`/api/lots/${id}`);
+  const hist = moves.length ? moves.map((m) => `<div class="s">${fmtDate(m.created_at.slice(0, 10))} · ${esc(m.kind)} · ${m.units > 0 ? '-' : '+'}${Math.abs(m.units)}${m.note ? ` · ${esc(m.note)}` : ''}</div>`).join('') : '<div class="s">No movements yet.</div>';
+  const v = await dialog(`${lot.code} · ${lot.product_name}`, `
+    <label>Best by <input name="best_by" type="date" value="${lot.best_by || ''}"></label>
+    <label>Unit size <input name="unit_size" value="${esc(lot.unit_size || '')}"></label>
+    <label>Supplier / source <input name="supplier" value="${esc(lot.supplier || '')}"></label>
+    <label>What went in <textarea name="inputs">${esc(lot.inputs || '')}</textarea></label>
+    <label>Notes <textarea name="notes">${esc(lot.notes || '')}</textarea></label>
+    <label>Status <select name="status">${['active', 'sold_out', 'hold', 'retired'].map((s) => `<option value="${s}" ${lot.status === s ? 'selected' : ''}>${s.replace('_', ' ')}</option>`).join('')}</select></label>
+    <label>Hold reason (if on hold) <input name="hold_reason" value="${esc(lot.hold_reason || '')}"></label>
+    <h2 style="margin-top:.6rem">History</h2>${hist}`);
+  if (!v) return;
+  try { await api(`/api/lots/${id}`, { method: 'PATCH', body: v }); toast('Saved'); await loadLots(); renderLots(); } catch (e) { toast(e.message, true); }
+}
+
+/* ---------- orders / shipping ---------- */
+async function loadOrders() { state.orders = (await api('/api/orders?status=all')).orders; }
+function renderOrders() {
+  const el = $('#orders-list');
+  const open = state.orders.filter((o) => o.status === 'open');
+  if (!state.orders.length) { el.innerHTML = '<div class="empty">No orders yet. Import a store export or add one by hand.</div>'; return; }
+  el.innerHTML = state.orders.map((o) => `<div class="item">
+    <div><div class="t">${esc(o.order_ref)} · ${esc(o.customer_name)}<span class="tag ${o.status === 'open' ? 'warn' : o.status === 'shipped' ? 'ok' : ''}">${esc(o.status)}</span>${o.weight_oz ? '' : '<span class="tag bad">needs weight</span>'}</div>
+    <div class="s">${esc(o.line1)}${o.line2 ? ', ' + esc(o.line2) : ''}, ${esc(o.city)}, ${esc(o.state)} ${esc(o.zip)}${o.items ? ' · ' + esc(o.items) : ''}${o.weight_oz ? ` · ${o.weight_oz} oz` : ''}${o.tracking ? ' · ' + esc(o.tracking) : ''}</div></div>
+    <div class="actions"><button class="small" data-weight="${o.id}">Weight</button>${o.status !== 'shipped' ? `<button class="small" data-ship="${o.id}">Mark shipped</button>` : ''}${o.status === 'exported' ? `<button class="small" data-reopen="${o.id}">Reopen</button>` : ''}</div></div>`).join('');
+  $$('[data-weight]', el).forEach((b) => (b.onclick = () => setWeight(state.orders.find((o) => o.id === b.dataset.weight))));
+  $$('[data-ship]', el).forEach((b) => (b.onclick = () => markShipped(b.dataset.ship)));
+  $$('[data-reopen]', el).forEach((b) => (b.onclick = async () => { await api('/api/orders', { method: 'PATCH', body: { id: b.dataset.reopen, status: 'open' } }); await loadOrders(); renderOrders(); }));
+  $('#btn-pirate').disabled = !open.length;
+}
+async function setWeight(o) {
+  const v = await dialog(`${o.order_ref}: package`, `
+    <label>Weight (oz) <input name="weight_oz" type="number" step="0.1" min="0.1" required value="${o.weight_oz ?? ''}"></label>
+    <div class="row gap"><label>Length (in) <input name="length_in" type="number" step="0.1" value="${o.length_in ?? ''}"></label><label>Width <input name="width_in" type="number" step="0.1" value="${o.width_in ?? ''}"></label><label>Height <input name="height_in" type="number" step="0.1" value="${o.height_in ?? ''}"></label></div>`);
+  if (!v) return;
+  try { await api('/api/orders', { method: 'PATCH', body: { id: o.id, ...v } }); await loadOrders(); renderOrders(); } catch (e) { toast(e.message, true); }
+}
+async function markShipped(id) {
+  const v = await dialog('Mark shipped', `<label>Tracking number (optional) <input name="tracking"></label>`, 'Shipped');
+  if (!v) return;
+  try { await api('/api/orders', { method: 'PATCH', body: { id, status: 'shipped', tracking: v.tracking } }); await loadOrders(); renderOrders(); } catch (e) { toast(e.message, true); }
+}
+$('#btn-new-order').onclick = async () => {
+  const v = await dialog('New order', `
+    <label>Order ref <input name="order_ref" required></label>
+    <label>Name <input name="customer_name" required></label>
+    <label>Email <input name="email" type="email"></label>
+    <label>Address <input name="line1" required></label>
+    <label>Apt / unit <input name="line2"></label>
+    <div class="row gap"><label>City <input name="city" required></label><label>State <input name="state" required maxlength="2"></label><label>Zip <input name="zip" required></label></div>
+    <label>Items <input name="items"></label>
+    <label>Weight (oz) <input name="weight_oz" type="number" step="0.1"></label>`, 'Add');
+  if (!v) return;
+  try { await api('/api/orders', { method: 'POST', body: v }); toast('Order added'); await loadOrders(); renderOrders(); } catch (e) { toast(e.message, true); }
+};
+$('#btn-import-orders').onclick = () => pickFile(async (text) => {
+  try { const r = await api('/api/orders', { method: 'POST', body: { csv: text } }); toast(`Imported ${r.inserted} order${r.inserted === 1 ? '' : 's'}${r.skipped.length ? `, skipped ${r.skipped.length}` : ''}`); await loadOrders(); renderOrders(); } catch (e) { toast(e.message, true); }
+});
+$('#btn-pirate').onclick = async () => {
+  const pre = await api('/api/export/pirateship?dry=1');
+  if (!pre.ready) { toast(pre.left.length ? `Nothing ready: ${pre.left.map((l) => `${l.order_ref} (${l.problem})`).join(', ')}` : 'No open orders', true); return; }
+  if (pre.left.length && !confirm(`${pre.ready} ready. ${pre.left.length} will be left out: ${pre.left.map((l) => `${l.order_ref} (${l.problem})`).join(', ')}. Continue?`)) return;
+  location.href = '/api/export/pirateship';
+  setTimeout(async () => { await loadOrders(); renderOrders(); }, 1500);
+};
+
+/* ---------- account ---------- */
+function renderAccount() {
+  const a = state.me.account;
+  $('#plan-line').textContent = a.plan === 'trial' ? `Free trial: ${planLabel()}. Everything you enter stays if the trial ends; adding new records needs a plan.` : `Current plan: ${a.plan}.`;
+  const f = $('#acct-form'); f.name.value = a.name; f.lot_prefix.value = a.lot_prefix; f.lot_next.value = a.lot_next; f.lot_step.value = a.lot_step;
+}
+$('#acct-form').onsubmit = async (e) => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); try { const r = await api('/api/account', { method: 'PATCH', body: { ...v, lot_next: Number(v.lot_next), lot_step: Number(v.lot_step) } }); state.me.account = r.account; toast('Saved'); $('#acct').textContent = `${r.account.name} · ${planLabel()}`; } catch (err) { toast(err.message, true); } };
+$$('[data-plan]').forEach((b) => (b.onclick = async () => { try { const r = await api('/api/billing/checkout', { method: 'POST', body: { plan: b.dataset.plan } }); location.href = r.url; } catch (e) { toast(e.message, true); } }));
+$('#btn-restore').onclick = () => pickFile(async (text) => {
+  try { const data = JSON.parse(text); const r = await api('/api/backup', { method: 'POST', body: data }); toast(`Imported ${r.lots_seen} lots, ${r.products_created} new products`); await loadProducts(); } catch (e) { toast(e.message.includes('JSON') ? 'That file is not JSON' : e.message, true); }
+});
+function pickFile(cb) { const f = $('#file'); f.value = ''; f.onchange = () => { const file = f.files[0]; if (!file) return; file.text().then(cb); }; f.click(); }
+
+boot().catch((e) => { console.error(e); showAuth(); });

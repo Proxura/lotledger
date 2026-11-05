@@ -1,0 +1,1 @@
+{ "name": "LotLedger", "short_name": "LotLedger", "start_url": "/app/", "display": "standalone", "background_color": "#0f1a17", "theme_color": "#0f1a17", "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }] }

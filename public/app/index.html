@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>LotLedger</title>
+<link rel="stylesheet" href="/app/app.css">
+<link rel="manifest" href="/app/manifest.webmanifest">
+<meta name="theme-color" content="#0f1a17">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/app/">Lot<span>Ledger</span></a>
+  <nav id="nav" hidden>
+    <button data-view="lots" class="on">Lots</button>
+    <button data-view="products">Products</button>
+    <button data-view="orders">Ship</button>
+    <button data-view="account">Account</button>
+  </nav>
+  <div id="acct" class="acct" hidden></div>
+</header>
+
+<main id="main">
+  <section id="auth" class="card narrow">
+    <h1 id="auth-title">Sign in</h1>
+    <form id="auth-form">
+      <label>Business name <input name="business" placeholder="Four Waters" autocomplete="organization"></label>
+      <label>Email <input name="email" type="email" required autocomplete="email"></label>
+      <label>Password <input name="password" type="password" required minlength="10" autocomplete="current-password"></label>
+      <button class="primary" type="submit">Sign in</button>
+      <p class="muted small" id="auth-switch">New here? <a href="#signup">Create an account</a>. Free for 30 days, no card.</p>
+      <p class="err" id="auth-err"></p>
+    </form>
+  </section>
+
+  <section id="view-lots" class="view" hidden>
+    <div class="row between">
+      <h1>Lots</h1>
+      <div class="row gap">
+        <select id="lot-filter"><option value="active">Active</option><option value="sold_out">Sold out</option><option value="hold">On hold</option><option value="all">All</option></select>
+        <button class="primary" id="btn-new-lot">+ Log a batch</button>
+      </div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div id="lots-list" class="list"></div>
+  </section>
+
+  <section id="view-products" class="view" hidden>
+    <div class="row between"><h1>Products</h1><button class="primary" id="btn-new-product">+ Product</button></div>
+    <div id="products-list" class="list"></div>
+  </section>
+
+  <section id="view-orders" class="view" hidden>
+    <div class="row between"><h1>Ship</h1>
+      <div class="row gap">
+        <button id="btn-import-orders">Import orders CSV</button>
+        <button id="btn-new-order">+ Order</button>
+        <button class="primary" id="btn-pirate">Pirate Ship CSV</button>
+      </div>
+    </div>
+    <p class="muted small">Import a Shopify, Etsy, Square or Stripe order export, set weights, then one click gives you the file Pirate Ship's spreadsheet upload accepts. Orders you export are marked so they are not sent twice.</p>
+    <div id="orders-list" class="list"></div>
+  </section>
+
+  <section id="view-account" class="view" hidden>
+    <h1>Account</h1>
+    <div class="card">
+      <h2>Plan</h2>
+      <p id="plan-line"></p>
+      <div class="row gap wrap">
+        <button class="primary" data-plan="lifetime">Lifetime, $149 once</button>
+        <button data-plan="monthly">Monthly, $19</button>
+      </div>
+      <p class="muted small">Lifetime includes hosting and support for a year, then $5/month to keep it hosted. Both include chat support any hour.</p>
+    </div>
+    <div class="card">
+      <h2>Lot numbering</h2>
+      <form id="acct-form" class="row gap wrap">
+        <label>Business <input name="name"></label>
+        <label>Prefix <input name="lot_prefix" maxlength="8"></label>
+        <label>Next number <input name="lot_next" type="number" min="1"></label>
+        <label>Step <input name="lot_step" type="number" min="1" max="1000"></label>
+        <button type="submit">Save</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Your data</h2>
+      <div class="row gap wrap">
+        <a class="btn" href="/api/export/ledger">Download ledger CSV</a>
+        <a class="btn" href="/api/backup">Download JSON backup</a>
+        <button id="btn-restore">Import backup or old tracker JSON</button>
+        <button id="btn-logout">Sign out</button>
+      </div>
+      <p class="muted small">The CSV is the compliance ledger: every lot and every movement. Keep a copy somewhere you control.</p>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
+<div id="toast" class="toast" hidden></div>
+<input type="file" id="file" accept=".csv,.json,text/csv,application/json" hidden>
+<script src="/app/app.js" defer></script>
+</body>
+</html>
