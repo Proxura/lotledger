@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LotLedger labels</title>
+<style>
+  :root{--ink:#111;--muted:#555}
+  body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:#f4f4f2}
+  .bar{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;padding:.8rem 1rem;background:#fff;border-bottom:1px solid #ddd;position:sticky;top:0}
+  .bar label{font-size:.9rem;display:flex;gap:.4rem;align-items:center}
+  .bar input,.bar select{padding:.35rem .5rem;font:inherit}
+  .bar button{padding:.45rem .9rem;font:inherit;border:1px solid #333;background:#111;color:#fff;border-radius:6px;cursor:pointer}
+  .bar .muted{color:var(--muted);font-size:.85rem}
+  .sheet{padding:1rem;display:grid;gap:0}
+  .label{box-sizing:border-box;border:1px dashed #bbb;display:grid;grid-template-columns:auto 1fr;gap:.25in;align-items:center;padding:.08in .12in;background:#fff;overflow:hidden;page-break-inside:avoid}
+  .label canvas{display:block}
+  .label .code{font-weight:800;font-size:16pt;letter-spacing:.02em;line-height:1.05}
+  .label .l{font-size:8.5pt;line-height:1.25;color:#222}
+  .label .biz{font-size:7.5pt;color:var(--muted);margin-top:.04in}
+  /* 2.625 x 1 inch, 3 across (Avery 5160 style) */
+  .size-small .sheet{grid-template-columns:repeat(3,2.625in);column-gap:.125in;row-gap:0}
+  .size-small .label{width:2.625in;height:1in}
+  .size-small .code{font-size:13pt}.size-small .l{font-size:7pt}
+  /* 4 x 2 inch, 2 across */
+  .size-large .sheet{grid-template-columns:repeat(2,4in);gap:.25in}
+  .size-large .label{width:4in;height:2in;gap:.3in}
+  .size-large .code{font-size:22pt}.size-large .l{font-size:11pt}
+  @media print{.bar{display:none}body{background:#fff}.sheet{padding:0}.label{border-color:transparent}}
+  @page{margin:.5in}
+</style>
+</head>
+<body class="size-small">
+<div class="bar">
+  <label>Lot <input id="code" placeholder="FW-104" style="text-transform:uppercase"></label>
+  <label>Copies <input id="count" type="number" min="1" max="120" value="30" style="width:4.5rem"></label>
+  <label>Size <select id="size"><option value="small">2.625 x 1 in, 30 per sheet</option><option value="large">4 x 2 in, 8 per sheet</option></select></label>
+  <button id="go">Make labels</button>
+  <button id="print">Print</button>
+  <span class="muted" id="status"></span>
+</div>
+<div class="sheet" id="sheet"></div>
+<script src="/app/vendor/qrcode.min.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = (d) => (d ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+const q = new URLSearchParams(location.search);
+if (q.get('code')) $('#code').value = q.get('code');
+$('#size').onchange = () => { document.body.className = 'size-' + $('#size').value; };
+$('#print').onclick = () => window.print();
+$('#go').onclick = make;
+async function make() {
+  const code = $('#code').value.trim().toUpperCase(); if (!code) return;
+  $('#status').textContent = 'Looking up ' + code + '...';
+  const me = await fetch('/api/me').then((r) => r.json());
+  if (!me.signedIn) { $('#status').textContent = 'Sign in to the app first, then come back.'; return; }
+  const r = await fetch('/api/lots/lookup?code=' + encodeURIComponent(code)).then((r) => r.json());
+  if (!r.found) { $('#status').textContent = 'No lot with code ' + code + '.'; return; }
+  const l = r.lot, n = Math.min(120, Math.max(1, Number($('#count').value) || 1));
+  const px = $('#size').value === 'large' ? 150 : 84;
+  const sheet = $('#sheet'); sheet.innerHTML = '';
+  const payload = location.origin + '/app/#lot=' + encodeURIComponent(l.code);
+  for (let i = 0; i < n; i++) {
+    const el = document.createElement('div'); el.className = 'label';
+    el.innerHTML = `<canvas></canvas><div><div class="code">${esc(l.code)}</div><div class="l">${esc(l.product_name)}${l.unit_size ? ' · ' + esc(l.unit_size) : ''}<br>Made ${fmt(l.made_at)}${l.best_by ? '<br>Best by ' + fmt(l.best_by) : ''}</div><div class="biz">${esc(me.account.name)}</div></div>`;
+    sheet.appendChild(el);
+    await QRCode.toCanvas(el.querySelector('canvas'), payload, { width: px, margin: 0, errorCorrectionLevel: 'M' });
+  }
+  $('#status').textContent = n + ' label' + (n === 1 ? '' : 's') + ' for ' + l.code + '. The QR opens this lot in the app when scanned.';
+}
+if ($('#code').value) make();
+</script>
+</body>
+</html>

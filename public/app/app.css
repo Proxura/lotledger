@@ -28,3 +28,6 @@ dialog h2{margin-top:0}.dlg-actions{display:flex;gap:.5rem;justify-content:flex-
 .toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:var(--mint);color:var(--mint-ink);padding:.6rem 1rem;border-radius:999px;font-weight:600;z-index:9}.toast.bad{background:var(--bad);color:#fff}
 .empty{color:var(--muted);padding:2rem;text-align:center;border:1px dashed var(--line);border-radius:var(--radius)}
 @media (max-width:600px){.item{grid-template-columns:1fr}.item .actions{justify-content:flex-start}.acct{display:none}}
+.scan-wrap{margin:.6rem 0}.scan-wrap video{width:100%;max-height:60vh;border-radius:12px;background:#000}
+.btn-link{color:var(--accent,#6ee6c8);text-decoration:underline}
+input::placeholder{text-transform:none}

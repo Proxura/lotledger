@@ -31,12 +31,14 @@ function dialog(title, fieldsHtml, submitLabel = 'Save') {
 
 /* ---------- auth ---------- */
 async function boot() {
+  const m = location.hash.match(/[#&]lot=([^&]+)/); if (m) state.deepLot = decodeURIComponent(m[1]);
   state.me = await api('/api/me');
   if (!state.me.signedIn) return showAuth();
   $('#auth').hidden = true; $('#nav').hidden = false;
   $('#acct').hidden = false; $('#acct').textContent = `${state.me.account.name} · ${planLabel()}`;
   if (new URLSearchParams(location.search).get('paid') === '1') { toast('Payment received. Thank you.'); history.replaceState(null, '', '/app/'); }
   await Promise.all([loadProducts(), loadLots()]);
+  if (state.deepLot) { await show('scan'); $('#scan-form input[name=code]').value = state.deepLot; lookupCode(state.deepLot); return; }
   show(state.view);
 }
 function planLabel() {
@@ -71,6 +73,7 @@ async function show(view) {
   if (view === 'products') { await loadProducts(); renderProducts(); }
   if (view === 'orders') { await loadOrders(); renderOrders(); }
   if (view === 'account') renderAccount();
+  if (view !== 'scan') stopScan();
 }
 
 /* ---------- products ---------- */
@@ -159,9 +162,67 @@ async function lotDetails(id) {
     <label>Notes <textarea name="notes">${esc(lot.notes || '')}</textarea></label>
     <label>Status <select name="status">${['active', 'sold_out', 'hold', 'retired'].map((s) => `<option value="${s}" ${lot.status === s ? 'selected' : ''}>${s.replace('_', ' ')}</option>`).join('')}</select></label>
     <label>Hold reason (if on hold) <input name="hold_reason" value="${esc(lot.hold_reason || '')}"></label>
+    <p><a class="btn-link" href="/app/label?code=${encodeURIComponent(lot.code)}" target="_blank" rel="noopener">Print labels for this lot</a></p>
     <h2 style="margin-top:.6rem">History</h2>${hist}`);
   if (!v) return;
   try { await api(`/api/lots/${id}`, { method: 'PATCH', body: v }); toast('Saved'); await loadLots(); renderLots(); } catch (e) { toast(e.message, true); }
+}
+
+
+/* ---------- scan ---------- */
+let scanStream = null, scanTimer = null, scanBusy = false, lastScan = '';
+function stopScan() {
+  if (scanTimer) { cancelAnimationFrame(scanTimer); scanTimer = null; }
+  if (scanStream) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; }
+  const v = $('#scan-video'); if (v) { v.hidden = true; v.srcObject = null; }
+  const b = $('#btn-scan-toggle'); if (b) b.textContent = 'Start camera';
+}
+async function startScan() {
+  const video = $('#scan-video'), status = $('#scan-status');
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+  } catch (e) { status.textContent = 'Camera not available here. Type the code below instead.'; return; }
+  video.srcObject = scanStream; video.hidden = false; await video.play();
+  $('#btn-scan-toggle').textContent = 'Stop camera';
+  status.textContent = 'Looking for a code...';
+  const canvas = $('#scan-canvas'), ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const native = 'BarcodeDetector' in window ? new BarcodeDetector({ formats: ['qr_code', 'code_128'] }) : null;
+  const tick = async () => {
+    if (!scanStream) return;
+    if (video.readyState >= 2 && !scanBusy) {
+      scanBusy = true;
+      try {
+        let text = null;
+        if (native) { const codes = await native.detect(video); if (codes.length) text = codes[0].rawValue; }
+        else if (window.jsQR) {
+          canvas.width = video.videoWidth; canvas.height = video.videoHeight; ctx.drawImage(video, 0, 0);
+          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const q = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' }); if (q) text = q.data;
+        }
+        if (text && text !== lastScan) { lastScan = text; setTimeout(() => (lastScan = ''), 4000); await lookupCode(text); }
+      } catch (e) { /* keep scanning */ }
+      scanBusy = false;
+    }
+    scanTimer = requestAnimationFrame(tick);
+  };
+  tick();
+}
+$('#btn-scan-toggle').onclick = () => (scanStream ? stopScan() : startScan());
+$('#scan-form').onsubmit = (e) => { e.preventDefault(); const c = $('#scan-form input[name=code]').value; if (c.trim()) lookupCode(c); };
+async function lookupCode(raw) {
+  const status = $('#scan-status'), out = $('#scan-result');
+  status.textContent = `Looking up ${raw.trim()}...`;
+  const r = await api(`/api/lots/lookup?code=${encodeURIComponent(raw)}`);
+  if (!r.found) { status.textContent = `No lot with code ${r.code} in this account.`; out.innerHTML = ''; return; }
+  const l = r.lot; status.textContent = `Found ${l.code}.`;
+  if (navigator.vibrate) navigator.vibrate(60);
+  const tag = l.status === 'hold' ? '<span class="tag bad">on hold</span>' : l.status === 'sold_out' ? '<span class="tag">sold out</span>' : l.status === 'retired' ? '<span class="tag">retired</span>' : '<span class="tag ok">active</span>';
+  out.innerHTML = `<div class="item">
+    <div><div class="t">${esc(l.code)} · ${esc(l.product_name)}${tag}</div>
+    <div class="s">Made ${fmtDate(l.made_at)}${l.best_by ? ` · best by ${fmtDate(l.best_by)}` : ''} · ${l.units_left} of ${l.units_made} ${esc(l.unit_label)}${l.units_made === 1 ? '' : 's'} left${l.unit_size ? ` · ${esc(l.unit_size)}` : ''}</div></div>
+    <div class="actions"><button class="small primary" id="scan-move">Units out</button><button class="small" id="scan-open">Details</button></div></div>`;
+  $('#scan-move').onclick = () => moveUnits(l).then(() => lookupCode(l.code));
+  $('#scan-open').onclick = () => lotDetails(l.id).then(() => lookupCode(l.code));
 }
 
 /* ---------- orders / shipping ---------- */
@@ -229,3 +290,7 @@ $('#btn-restore').onclick = () => pickFile(async (text) => {
 function pickFile(cb) { const f = $('#file'); f.value = ''; f.onchange = () => { const file = f.files[0]; if (!file) return; file.text().then(cb); }; f.click(); }
 
 boot().catch((e) => { console.error(e); showAuth(); });
+window.addEventListener('hashchange', async () => {
+  const m = location.hash.match(/[#&]lot=([^&]+)/); if (!m || !state.me?.signedIn) return;
+  const code = decodeURIComponent(m[1]); await show('scan'); $('#scan-form input[name=code]').value = code; lookupCode(code);
+});

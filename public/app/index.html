@@ -16,6 +16,7 @@
     <button data-view="lots" class="on">Lots</button>
     <button data-view="products">Products</button>
     <button data-view="orders">Ship</button>
+    <button data-view="scan">Scan</button>
     <button data-view="account">Account</button>
     <a class="help" href="mailto:theforemans2002+lotledger@gmail.com?subject=LotLedger%20help" title="Email support">Help</a>
   </nav>
@@ -64,6 +65,15 @@
     <div id="orders-list" class="list"></div>
   </section>
 
+  <section id="view-scan" class="view" hidden>
+    <div class="row between"><h1>Scan</h1><button id="btn-scan-toggle" class="primary">Start camera</button></div>
+    <p class="muted small">Point the camera at a LotLedger label. The lot opens as soon as the code is read. No camera handy? Type the lot code instead.</p>
+    <div class="scan-wrap"><video id="scan-video" playsinline muted hidden></video><canvas id="scan-canvas" hidden></canvas></div>
+    <form id="scan-form" class="row gap"><input name="code" placeholder="Lot code, e.g. FW-104" style="text-transform:uppercase" autocomplete="off"><button type="submit">Look up</button></form>
+    <p class="muted small" id="scan-status"></p>
+    <div id="scan-result" class="list"></div>
+  </section>
+
   <section id="view-account" class="view" hidden>
     <h1>Account</h1>
     <div class="card">
@@ -101,6 +111,7 @@
 <dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
 <div id="toast" class="toast" hidden></div>
 <input type="file" id="file" accept=".csv,.json,text/csv,application/json" hidden>
+<script src="/app/vendor/jsqr.js" defer></script>
 <script src="/app/app.js" defer></script>
 </body>
 </html>
