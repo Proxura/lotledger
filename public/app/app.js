@@ -77,10 +77,21 @@ async function show(view) {
 }
 
 /* ---------- products ---------- */
-async function loadProducts() { state.products = (await api('/api/products')).products; }
+async function loadProducts() { state.products = (await api('/api/products')).products; const rm = $('#btn-sample-remove'); if (rm) rm.hidden = !state.products.some((p) => p.sample); }
+async function loadSample() {
+  try {
+    await api('/api/sample', { method: 'POST' });
+    toast('Sample data loaded. Remove it any time from Account.');
+    await Promise.all([loadProducts(), loadLots(), loadOrders()]); renderProducts(); renderLots(); renderOrders();
+  } catch (e) { toast(e.message, true); }
+}
+$('#btn-sample-remove').onclick = async () => {
+  if (!confirm('Remove the sample products, lots and orders? Your own records stay.')) return;
+  try { await api('/api/sample', { method: 'DELETE' }); toast('Sample data removed'); await Promise.all([loadProducts(), loadLots(), loadOrders()]); renderProducts(); renderLots(); renderOrders(); } catch (e) { toast(e.message, true); }
+};
 function renderProducts() {
   const el = $('#products-list');
-  if (!state.products.length) { el.innerHTML = '<div class="empty">Add your first product. A product is anything you make in batches.</div>'; return; }
+  if (!state.products.length) { el.innerHTML = '<div class="empty">Add your first product. A product is anything you make in batches.<br><button class="small" id="btn-sample-load" style="margin-top:.6rem">Or load sample data to look around</button></div>'; $('#btn-sample-load').onclick = loadSample; return; }
   el.innerHTML = state.products.map((p) => `<div class="item">
     <div><div class="t">${esc(p.name)}${p.active ? '' : '<span class="tag">archived</span>'}</div>
     <div class="s">${p.active_lots} active lot${p.active_lots === 1 ? '' : 's'} · ${p.units_on_hand} ${esc(p.unit_label)}${p.units_on_hand === 1 ? '' : 's'} on hand${p.shelf_life_days ? ` · best by ${p.shelf_life_days} days after made` : ''}</div></div>
@@ -112,7 +123,7 @@ function renderLots() {
   const onHand = active.reduce((n, l) => n + l.units_left, 0);
   $('#kpis').innerHTML = `<div class="kpi"><b>${active.length}</b>active lots</div><div class="kpi"><b>${onHand}</b>units on hand</div><div class="kpi ${soon ? 'warn' : ''}"><b>${soon}</b>sell soon (30 days)</div><div class="kpi ${expired ? 'bad' : ''}"><b>${expired}</b>past best-by</div>`;
   const el = $('#lots-list');
-  if (!lots.length) { el.innerHTML = `<div class="empty">${state.products.length ? 'No lots here yet. Log a batch when you make one.' : 'Add a product first, then log your first batch.'}</div>`; return; }
+  if (!lots.length) { el.innerHTML = `<div class="empty">${state.products.length ? 'No lots here yet. Log a batch when you make one.' : 'Add a product first, then log your first batch.<br><button class="small" id="btn-sample-load" style="margin-top:.6rem">Or load sample data to look around</button>'}</div>`; const b = $('#btn-sample-load'); if (b) b.onclick = loadSample; return; }
   el.innerHTML = lots.map((l) => {
     const pct = l.units_made ? Math.round((l.units_left / l.units_made) * 100) : 0;
     const tag = l.status === 'hold' ? '<span class="tag bad">on hold</span>' : l.status === 'sold_out' ? '<span class="tag">sold out</span>' : l.status === 'retired' ? '<span class="tag">retired</span>' : l.expired ? '<span class="tag bad">past best-by</span>' : l.sell_soon ? '<span class="tag warn">sell soon</span>' : '<span class="tag ok">good</span>';

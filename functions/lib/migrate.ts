@@ -22,6 +22,14 @@ const STEPS: Step[] = [
       }
     },
   },
+  {
+    version: 3, // migrations/0003_sample.sql
+    apply: async (db) => {
+      for (const t of ['products', 'lots', 'orders']) {
+        if (!(await hasColumn(db, t, 'sample'))) await db.prepare(`alter table ${t} add column sample integer not null default 0`).run();
+      }
+    },
+  },
 ];
 
 const LATEST = STEPS[STEPS.length - 1].version;
