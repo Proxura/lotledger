@@ -63,7 +63,10 @@ export function handle(fn: (ctx: Ctx) => Promise<Response>): (ctx: Ctx) => Promi
 
 /* ---------- passwords ---------- */
 
-const ITER = 210_000;
+// 100,000 is the ceiling Cloudflare's crypto.subtle enforces for PBKDF2 (210,000 throws, and did: every
+// production signup returned 500 until 2026-11-06 because the local runtime does not enforce the cap).
+// The count is stored in each hash, so raising it later only affects new passwords.
+const ITER = 100_000;
 const b64 = (buf: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(buf as ArrayBuffer)));
 const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
