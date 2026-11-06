@@ -1,7 +1,10 @@
 import { handle, json, requireSession, assertCanWrite, readJson, str, num, id, bad, parseCsv, nowIso } from '../lib/core.ts';
+import { carrierFor } from '../lib/pack.ts';
+import { ensureSchema } from '../lib/migrate.ts';
 
 export const onRequestGet = handle(async (ctx) => {
   const s = await requireSession(ctx);
+  await ensureSchema(ctx.env.DB);
   const url = new URL(ctx.request.url);
   const status = url.searchParams.get('status') || 'open';
   const stmt = status === 'all'
@@ -40,6 +43,7 @@ export const onRequestPost = handle(async (ctx) => {
 export const onRequestPatch = handle(async (ctx) => {
   const s = await requireSession(ctx);
   assertCanWrite(s);
+  await ensureSchema(ctx.env.DB);
   const body = await readJson<Record<string, unknown>>(ctx.request);
   const oid = str(body.id, 64);
   if (!oid) return bad('Which order?');
@@ -51,7 +55,8 @@ export const onRequestPatch = handle(async (ctx) => {
     setIf('status', st);
     if (st === 'shipped') setIf('shipped_at', nowIso());
   }
-  if (typeof body.tracking === 'string') setIf('tracking', str(body.tracking, 80) || null);
+  if (typeof body.tracking === 'string') { const tr = str(body.tracking, 80); setIf('tracking', tr || null); setIf('carrier', tr ? carrierFor(tr) : null); }
+  if (typeof body.items === 'string') setIf('items', str(body.items, 500) || null);
   for (const k of ['weight_oz', 'length_in', 'width_in', 'height_in']) if (body[k] !== undefined) setIf(k, num(body[k]));
   if (!sets.length) return bad('Nothing to change.');
   vals.push(oid, s.account_id);

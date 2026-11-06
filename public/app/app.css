@@ -15,6 +15,7 @@ button.primary,.btn.primary{background:var(--mint);color:var(--mint-ink);border-
 button.small{padding:.3rem .55rem;font-size:.85rem}
 .row{display:flex;align-items:center}.between{justify-content:space-between;gap:1rem;flex-wrap:wrap}.gap{gap:.5rem}.wrap{flex-wrap:wrap}
 .muted{color:var(--muted)}.small{font-size:.85rem}.err{color:var(--bad);min-height:1.2em;font-size:.9rem}
+.hint{color:var(--muted);font-size:.85rem;margin:.4rem 0 0}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.6rem;margin-bottom:1rem}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:.7rem .9rem}.kpi b{display:block;font-size:1.4rem}.kpi.warn b{color:var(--warn)}.kpi.bad b{color:var(--bad)}
 .list{display:flex;flex-direction:column;gap:.5rem}

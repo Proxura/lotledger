@@ -231,14 +231,36 @@ function renderOrders() {
   const el = $('#orders-list');
   const open = state.orders.filter((o) => o.status === 'open');
   if (!state.orders.length) { el.innerHTML = '<div class="empty">No orders yet. Import a store export or add one by hand.</div>'; return; }
-  el.innerHTML = state.orders.map((o) => `<div class="item">
-    <div><div class="t">${esc(o.order_ref)} · ${esc(o.customer_name)}<span class="tag ${o.status === 'open' ? 'warn' : o.status === 'shipped' ? 'ok' : ''}">${esc(o.status)}</span>${o.weight_oz ? '' : '<span class="tag bad">needs weight</span>'}</div>
-    <div class="s">${esc(o.line1)}${o.line2 ? ', ' + esc(o.line2) : ''}, ${esc(o.city)}, ${esc(o.state)} ${esc(o.zip)}${o.items ? ' · ' + esc(o.items) : ''}${o.weight_oz ? ` · ${o.weight_oz} oz` : ''}${o.tracking ? ' · ' + esc(o.tracking) : ''}</div></div>
-    <div class="actions"><button class="small" data-weight="${o.id}">Weight</button>${o.status !== 'shipped' ? `<button class="small" data-ship="${o.id}">Mark shipped</button>` : ''}${o.status === 'exported' ? `<button class="small" data-reopen="${o.id}">Reopen</button>` : ''}</div></div>`).join('');
-  $$('[data-weight]', el).forEach((b) => (b.onclick = () => setWeight(state.orders.find((o) => o.id === b.dataset.weight))));
-  $$('[data-ship]', el).forEach((b) => (b.onclick = () => markShipped(b.dataset.ship)));
-  $$('[data-reopen]', el).forEach((b) => (b.onclick = async () => { await api('/api/orders', { method: 'PATCH', body: { id: b.dataset.reopen, status: 'open' } }); await loadOrders(); renderOrders(); }));
+  el.innerHTML = state.orders.map((o) => {
+    const packed = o.packed ? JSON.parse(o.packed) : null;
+    const lots = packed ? packed.map((a) => `${esc(a.lot_code)} ×${a.units}`).join(', ') : '';
+    return `<div class="item">
+    <div><div class="t">${esc(o.order_ref)} · ${esc(o.customer_name)}<span class="tag ${o.status === 'open' ? 'warn' : o.status === 'shipped' ? 'ok' : ''}">${esc(o.status)}</span>${o.weight_oz ? '' : '<span class="tag bad">needs weight</span>'}${packed ? '<span class="tag ok">packed</span>' : o.status !== 'shipped' ? '<span class="tag">not packed</span>' : ''}</div>
+    <div class="s">${esc(o.line1)}${o.line2 ? ', ' + esc(o.line2) : ''}, ${esc(o.city)}, ${esc(o.state)} ${esc(o.zip)}${o.items ? ' · ' + esc(o.items) : ''}${o.weight_oz ? ` · ${o.weight_oz} oz` : ''}${o.tracking ? ` · ${o.carrier ? esc(o.carrier.toUpperCase()) + ' ' : ''}${esc(o.tracking)}` : ''}</div>
+    ${lots ? `<div class="s">From lots: ${lots}</div>` : ''}</div>
+    <div class="actions">${packed ? `<button class="small" data-unpack="${o.id}">Unpack</button>` : `<button class="small primary" data-pack="${o.id}">Pack</button>`}<button class="small" data-weight="${o.id}">Weight</button>${o.status !== 'shipped' ? `<button class="small" data-ship="${o.id}">Mark shipped</button>` : ''}${o.status === 'exported' ? `<button class="small" data-reopen="${o.id}">Reopen</button>` : ''}</div></div>`;
+  }).join('');
+  $$('[data-pack]', el).forEach((b) => (b.onclick = () => packOrder(state.orders.find((o) => o.id === b.dataset.pack))));
+  $$('[data-unpack]', el).forEach((b) => (b.onclick = () => unpackOrder(state.orders.find((o) => o.id === b.dataset.unpack))));
   $('#btn-pirate').disabled = !open.length;
+}
+async function packOrder(o, itemsText) {
+  const items = itemsText ?? o.items ?? '';
+  try {
+    const r = await api('/api/orders/pack', { method: 'POST', body: { id: o.id, items } });
+    toast(`Packed from ${r.packed.map((a) => a.lot_code).join(', ')}`);
+    await Promise.all([loadOrders(), loadLots()]); renderOrders();
+  } catch (e) {
+    // Unmatched product or short stock: let them fix the items line and go again.
+    const v = await dialog(`${o.order_ref}: pack`, `<p class="err">${esc(e.message)}</p>
+      <label>Items, one per line or comma separated, like "2 x Fresh Milled Flour" <textarea name="items" rows="3">${esc(items)}</textarea></label>
+      <p class="hint">Oldest lot goes first. If a line is short, nothing is taken from any lot.</p>`, 'Pack');
+    if (v) return packOrder(o, v.items);
+  }
+}
+async function unpackOrder(o) {
+  if (!confirm(`Put ${o.order_ref}'s units back on their lots?`)) return;
+  try { await api('/api/orders/pack', { method: 'POST', body: { id: o.id, undo: true } }); toast('Units put back'); await Promise.all([loadOrders(), loadLots()]); renderOrders(); } catch (e) { toast(e.message, true); }
 }
 async function setWeight(o) {
   const v = await dialog(`${o.order_ref}: package`, `
