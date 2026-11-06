@@ -36,7 +36,7 @@ async function boot() {
   if (!state.me.signedIn) return showAuth();
   $('#auth').hidden = true; $('#nav').hidden = false;
   $('#acct').hidden = false; $('#acct').textContent = `${state.me.account.name} · ${planLabel()}`;
-  if (new URLSearchParams(location.search).get('paid') === '1') { toast('Payment received. Thank you.'); history.replaceState(null, '', '/app/'); }
+  if (new URLSearchParams(location.search).get('paid') === '1') { toast('Payment received. Thank you.'); history.replaceState(null, '', '/app/'); state.view = 'account'; setTimeout(async () => { state.me = await api('/api/me'); $('#acct').textContent = `${state.me.account.name} · ${planLabel()}`; renderAccount(); }, 2500); }
   await Promise.all([loadProducts(), loadLots()]);
   if (state.deepLot) { await show('scan'); $('#scan-form input[name=code]').value = state.deepLot; lookupCode(state.deepLot); return; }
   show(state.view);
@@ -283,7 +283,30 @@ function renderAccount() {
   const f = $('#acct-form'); f.name.value = a.name; f.lot_prefix.value = a.lot_prefix; f.lot_next.value = a.lot_next; f.lot_step.value = a.lot_step;
 }
 $('#acct-form').onsubmit = async (e) => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); try { const r = await api('/api/account', { method: 'PATCH', body: { ...v, lot_next: Number(v.lot_next), lot_step: Number(v.lot_step) } }); state.me.account = r.account; toast('Saved'); $('#acct').textContent = `${r.account.name} · ${planLabel()}`; } catch (err) { toast(err.message, true); } };
-$$('[data-plan]').forEach((b) => (b.onclick = async () => { try { const r = await api('/api/billing/checkout', { method: 'POST', body: { plan: b.dataset.plan } }); location.href = r.url; } catch (e) { toast(e.message, true); } }));
+let stripeJs = null, embedded = null;
+function loadStripeJs() {
+  if (window.Stripe) return Promise.resolve();
+  if (stripeJs) return stripeJs;
+  stripeJs = new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://js.stripe.com/v3/'; s.onload = res; s.onerror = () => rej(new Error('Could not load the card form. Check your connection and try again.')); document.head.appendChild(s); });
+  return stripeJs;
+}
+async function openCheckout(plan) {
+  try {
+    const cfg = await api('/api/billing/config');
+    if (!cfg.configured) { toast('Billing is not switched on yet. Your trial keeps running.', true); return; }
+    await loadStripeJs();
+    const r = await api('/api/billing/checkout', { method: 'POST', body: { plan } });
+    if (embedded) { embedded.destroy(); embedded = null; }
+    $('#checkout-title').textContent = plan === 'lifetime' ? 'LotLedger Lifetime, $149 once' : 'LotLedger Monthly, $19 a month';
+    $('#checkout-wrap').hidden = false;
+    const stripe = Stripe(cfg.publishableKey);
+    embedded = await stripe.initEmbeddedCheckout({ clientSecret: r.clientSecret });
+    embedded.mount('#checkout-host');
+    $('#checkout-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) { toast(e.message, true); }
+}
+$$('[data-plan]').forEach((b) => (b.onclick = () => openCheckout(b.dataset.plan)));
+$('#btn-checkout-close').onclick = () => { if (embedded) { embedded.destroy(); embedded = null; } $('#checkout-wrap').hidden = true; };
 $('#btn-restore').onclick = () => pickFile(async (text) => {
   try { const data = JSON.parse(text); const r = await api('/api/backup', { method: 'POST', body: data }); toast(`Imported ${r.lots_seen} lots, ${r.products_created} new products`); await loadProducts(); } catch (e) { toast(e.message.includes('JSON') ? 'That file is not JSON' : e.message, true); }
 });

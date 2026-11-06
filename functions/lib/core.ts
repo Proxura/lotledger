@@ -6,6 +6,7 @@ export interface Env {
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PRICE_LIFETIME?: string;   // one-time $149
   STRIPE_PRICE_MONTHLY?: string;    // $19/mo
+  STRIPE_PUBLISHABLE_KEY?: string;  // pk_..., public, mounts embedded Checkout
   APP_URL?: string;                 // https://lotledger.pages.dev or the custom domain
 }
 

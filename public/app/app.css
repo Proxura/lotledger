@@ -31,3 +31,4 @@ dialog h2{margin-top:0}.dlg-actions{display:flex;gap:.5rem;justify-content:flex-
 .scan-wrap{margin:.6rem 0}.scan-wrap video{width:100%;max-height:60vh;border-radius:12px;background:#000}
 .btn-link{color:var(--accent,#6ee6c8);text-decoration:underline}
 input::placeholder{text-transform:none}
+.checkout-host{margin-top:.8rem;background:#fff;border-radius:12px;padding:.4rem;min-height:120px}

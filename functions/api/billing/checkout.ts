@@ -1,6 +1,12 @@
 import { handle, json, requireSession, readJson, str, bad } from '../../lib/core.ts';
 
-/** Start a Stripe Checkout session for the lifetime ($149 one-time) or monthly ($19) plan. */
+/**
+ * Start a Stripe Checkout session for the lifetime ($149 one-time) or monthly
+ * ($19) plan. The session is created in embedded mode, so the card form
+ * renders inside our own Account page instead of bouncing the customer to a
+ * stripe.com page. We return the client secret; the browser mounts it with
+ * Stripe.js. Payment confirmation still arrives through the webhook.
+ */
 export const onRequestPost = handle(async (ctx) => {
   const s = await requireSession(ctx);
   const { env } = ctx;
@@ -11,11 +17,11 @@ export const onRequestPost = handle(async (ctx) => {
   if (!price) return bad('Pick lifetime or monthly.');
   const appUrl = env.APP_URL || new URL(ctx.request.url).origin;
   const form = new URLSearchParams({
+    ui_mode: 'embedded',
     mode: plan === 'lifetime' ? 'payment' : 'subscription',
     'line_items[0][price]': price,
     'line_items[0][quantity]': '1',
-    success_url: `${appUrl}/app/?paid=1`,
-    cancel_url: `${appUrl}/app/?paid=0`,
+    return_url: `${appUrl}/app/?paid=1&session_id={CHECKOUT_SESSION_ID}`,
     customer_email: s.email,
     client_reference_id: s.account_id,
     'metadata[account_id]': s.account_id,
@@ -28,7 +34,7 @@ export const onRequestPost = handle(async (ctx) => {
     headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'content-type': 'application/x-www-form-urlencoded' },
     body: form,
   });
-  const data = await res.json<{ url?: string; error?: { message?: string } }>();
-  if (!res.ok || !data.url) return bad(`Stripe: ${data.error?.message || 'could not start checkout'}`, 502);
-  return json({ url: data.url });
+  const data = await res.json<{ client_secret?: string; error?: { message?: string } }>();
+  if (!res.ok || !data.client_secret) return bad(`Stripe: ${data.error?.message || 'could not start checkout'}`, 502);
+  return json({ clientSecret: data.client_secret });
 });
