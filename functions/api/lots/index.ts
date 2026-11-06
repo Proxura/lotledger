@@ -1,4 +1,5 @@
 import { handle, json, requireSession, assertCanWrite, readJson, str, int, id, bad, isDate, addDaysDate, dateOnly, nowIso } from '../../lib/core.ts';
+import { ensureSchema } from '../../lib/migrate.ts';
 
 export const onRequestGet = handle(async (ctx) => {
   const s = await requireSession(ctx);
@@ -25,11 +26,13 @@ export const onRequestGet = handle(async (ctx) => {
 export const onRequestPost = handle(async (ctx) => {
   const s = await requireSession(ctx);
   assertCanWrite(s);
+  await ensureSchema(ctx.env.DB);
   const body = await readJson<Record<string, unknown>>(ctx.request);
   const productId = str(body.product_id, 64);
-  const product = await ctx.env.DB.prepare('select id, shelf_life_days from products where id = ?1 and account_id = ?2')
-    .bind(productId, s.account_id).first<{ id: string; shelf_life_days: number | null }>();
+  const product = await ctx.env.DB.prepare('select id, shelf_life_days, components from products where id = ?1 and account_id = ?2')
+    .bind(productId, s.account_id).first<{ id: string; shelf_life_days: number | null; components: string | null }>();
   if (!product) return bad('Pick a product.');
+  if (product.components) return bad('That product is a kit. Log batches of its parts instead.');
   const madeAt = str(body.made_at, 10) || dateOnly();
   if (!isDate(madeAt)) return bad('Made date must be YYYY-MM-DD.');
   let bestBy = str(body.best_by, 10);

@@ -6,7 +6,8 @@
  *  - a refund puts the units back on the lot they came from (unpack), which the old tracker never did
  */
 
-export type Product = { id: string; name: string; unit_label: string };
+export type Product = { id: string; name: string; unit_label: string; components?: string | null };
+export type Component = { product_id: string; units: number };
 export type LotRow = { id: string; code: string; product_id: string; made_at: string; units_made: number; units_out: number; status: string };
 export type Line = { qty: number; text: string; product?: Product };
 export type Alloc = { product_id: string; product_name: string; lot_id: string; lot_code: string; units: number };
@@ -48,6 +49,28 @@ export function matchProduct(text: string, products: Product[]): Product | undef
     if (score > bestScore && score >= 0.6) { best = p; bestScore = score; }
   }
   return best;
+}
+
+/** Expand kit lines into their component products. A kit of 2 soap + 1 jam ordered twice becomes 4 soap + 2 jam.
+ *  Lines for the same product are merged so the allocator sees one need per product. One level only: a kit cannot contain a kit. */
+export function expandKits(lines: Line[], products: Product[]): Line[] {
+  const out: Line[] = [];
+  const add = (qty: number, text: string, product: Product) => {
+    const prev = out.find((l) => l.product && l.product.id === product.id);
+    if (prev) prev.qty += qty; else out.push({ qty, text, product });
+  };
+  for (const line of lines) {
+    if (!line.product) { out.push(line); continue; }
+    let comps: Component[] = [];
+    try { comps = line.product.components ? JSON.parse(line.product.components) : []; } catch { comps = []; }
+    if (!comps.length) { add(line.qty, line.text, line.product); continue; }
+    for (const c of comps) {
+      const p = products.find((x) => x.id === c.product_id);
+      if (!p) { out.push({ qty: line.qty * c.units, text: `${line.product.name} (part missing)` }); continue; }
+      add(line.qty * c.units, `${line.product.name}: ${p.name}`, p);
+    }
+  }
+  return out;
 }
 
 /** Allocate every line from the oldest active lots. Returns allocations, or the shortfall that stopped it. */

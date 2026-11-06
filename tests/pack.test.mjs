@@ -56,3 +56,12 @@ test('carrier from the tracking number shape', () => {
   assert.equal(carrierFor('ABC'), 'other');
   assert.equal(carrierFor(''), null);
 });
+
+import { expandKits } from '../functions/lib/pack.ts';
+test('kits expand into their parts and merge with plain lines', () => {
+  const ps = [...products, { id: 'k1', name: 'Gift Box', unit_label: 'box', components: JSON.stringify([{ product_id: 'p1', units: 2 }, { product_id: 'p4', units: 1 }]) }];
+  const lines = parseItems('2 x Gift Box; 1 x Fresh Milled Flour');
+  for (const l of lines) l.product = matchProduct(l.text, ps);
+  const out = expandKits(lines, ps);
+  assert.deepEqual(out.map((l) => [l.product.id, l.qty]), [['p1', 5], ['p4', 2]]);
+});

@@ -1,6 +1,6 @@
 import { handle, json, requireSession, assertCanWrite, readJson, str, id, bad, nowIso } from '../../lib/core.ts';
 import { ensureSchema } from '../../lib/migrate.ts';
-import { parseItems, matchProduct, allocateFifo, type Product, type LotRow, type Alloc } from '../../lib/pack.ts';
+import { parseItems, matchProduct, allocateFifo, expandKits, type Product, type LotRow, type Alloc } from '../../lib/pack.ts';
 
 type OrderRow = { id: string; order_ref: string; items: string | null; packed: string | null; status: string };
 
@@ -33,9 +33,10 @@ export const onRequestPost = handle(async (ctx) => {
   if (order.packed) return bad('Already packed. Unpack it first to change the lots.');
   const itemsText = typeof body.items === 'string' ? str(body.items, 500) : (order.items || '');
   if (!itemsText.trim()) return bad('This order has no items line. Add one like "2 x Fresh Milled Flour".');
-  const { results: products } = await ctx.env.DB.prepare('select id, name, unit_label from products where account_id = ?1 and active = 1').bind(s.account_id).all<Product>();
-  const lines = parseItems(itemsText);
-  for (const l of lines) l.product = matchProduct(l.text, products);
+  const { results: products } = await ctx.env.DB.prepare('select id, name, unit_label, components from products where account_id = ?1 and active = 1').bind(s.account_id).all<Product>();
+  const parsed = parseItems(itemsText);
+  for (const l of parsed) l.product = matchProduct(l.text, products);
+  const lines = expandKits(parsed, products);
   const unmatched = lines.filter((l) => !l.product).map((l) => l.text);
   if (unmatched.length) return json({ error: `No product called ${unmatched.map((u) => `"${u}"`).join(', ')}. Fix the items line or add the product.`, unmatched }, 409);
   const { results: lots } = await ctx.env.DB.prepare('select id, code, product_id, made_at, units_made, units_out, status from lots where account_id = ?1').bind(s.account_id).all<LotRow>();

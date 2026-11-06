@@ -30,6 +30,12 @@ const STEPS: Step[] = [
       }
     },
   },
+  {
+    version: 4, // migrations/0004_kits.sql
+    apply: async (db) => {
+      if (!(await hasColumn(db, 'products', 'components'))) await db.prepare('alter table products add column components text').run();
+    },
+  },
 ];
 
 const LATEST = STEPS[STEPS.length - 1].version;

@@ -93,23 +93,29 @@ function renderProducts() {
   const el = $('#products-list');
   if (!state.products.length) { el.innerHTML = '<div class="empty">Add your first product. A product is anything you make in batches.<br><button class="small" id="btn-sample-load" style="margin-top:.6rem">Or load sample data to look around</button></div>'; $('#btn-sample-load').onclick = loadSample; return; }
   el.innerHTML = state.products.map((p) => `<div class="item">
-    <div><div class="t">${esc(p.name)}${p.active ? '' : '<span class="tag">archived</span>'}</div>
-    <div class="s">${p.active_lots} active lot${p.active_lots === 1 ? '' : 's'} · ${p.units_on_hand} ${esc(p.unit_label)}${p.units_on_hand === 1 ? '' : 's'} on hand${p.shelf_life_days ? ` · best by ${p.shelf_life_days} days after made` : ''}</div></div>
-    <div class="actions"><button class="small" data-edit="${p.id}">Edit</button><button class="small" data-lot-for="${p.id}">Log batch</button></div></div>`).join('');
+    <div><div class="t">${esc(p.name)}${p.components ? '<span class="tag">kit</span>' : ''}${p.active ? '' : '<span class="tag">archived</span>'}</div>
+    <div class="s">${p.components ? `Packs as ${esc(kitText(p).replace(/\n/g, ', '))}` : `${p.active_lots} active lot${p.active_lots === 1 ? '' : 's'} · ${p.units_on_hand} ${esc(p.unit_label)}${p.units_on_hand === 1 ? '' : 's'} on hand${p.shelf_life_days ? ` · best by ${p.shelf_life_days} days after made` : ''}`}</div></div>
+    <div class="actions"><button class="small" data-edit="${p.id}">Edit</button>${p.components ? '' : `<button class="small" data-lot-for="${p.id}">Log batch</button>`}</div></div>`).join('');
   $$('[data-edit]', el).forEach((b) => (b.onclick = () => editProduct(state.products.find((p) => p.id === b.dataset.edit))));
   $$('[data-lot-for]', el).forEach((b) => (b.onclick = () => newLot(b.dataset.lotFor)));
 }
 const productFields = (p = {}) => `
   <label>Name <input name="name" required value="${esc(p.name || '')}" placeholder="Fresh Milled Flour"></label>
   <label>Unit (bag, jar, tube, loaf) <input name="unit_label" value="${esc(p.unit_label || 'unit')}"></label>
-  <label>Shelf life in days (optional; fills best-by automatically) <input name="shelf_life_days" type="number" min="1" max="3650" value="${p.shelf_life_days ?? ''}"></label>`;
+  <label>Shelf life in days (optional; fills best-by automatically) <input name="shelf_life_days" type="number" min="1" max="3650" value="${p.shelf_life_days ?? ''}"></label>
+  <label>Kit contents (optional). One line per part, like "2 x Lavender Bar Soap". A kit has no lots of its own; packing one takes the parts from their lots. <textarea name="kit" rows="3" placeholder="2 x Lavender Bar Soap&#10;1 x Strawberry Jam">${esc(kitText(p))}</textarea></label>`;
+function kitText(p) {
+  if (!p || !p.components) return '';
+  let comps = []; try { comps = JSON.parse(p.components); } catch { return ''; }
+  return comps.map((c) => { const q = state.products.find((x) => x.id === c.product_id); return `${c.units} x ${q ? q.name : '?'}`; }).join('\n');
+}
 $('#btn-new-product').onclick = async () => {
   const v = await dialog('New product', productFields(), 'Add'); if (!v) return;
   try { await api('/api/products', { method: 'POST', body: { ...v, shelf_life_days: v.shelf_life_days ? Number(v.shelf_life_days) : null } }); toast('Product added'); await loadProducts(); renderProducts(); } catch (e) { toast(e.message, true); }
 };
 async function editProduct(p) {
   const v = await dialog('Edit product', productFields(p) + `<label><span>Status</span><select name="active"><option value="1" ${p.active ? 'selected' : ''}>Active</option><option value="0" ${!p.active ? 'selected' : ''}>Archived</option></select></label>`); if (!v) return;
-  try { await api('/api/products', { method: 'PATCH', body: { id: p.id, name: v.name, unit_label: v.unit_label, shelf_life_days: v.shelf_life_days ? Number(v.shelf_life_days) : null, active: v.active === '1' } }); toast('Saved'); await loadProducts(); renderProducts(); } catch (e) { toast(e.message, true); }
+  try { await api('/api/products', { method: 'PATCH', body: { id: p.id, name: v.name, unit_label: v.unit_label, shelf_life_days: v.shelf_life_days ? Number(v.shelf_life_days) : null, active: v.active === '1', kit: v.kit || '' } }); toast('Saved'); await loadProducts(); renderProducts(); } catch (e) { toast(e.message, true); }
 }
 
 /* ---------- lots ---------- */
@@ -138,8 +144,8 @@ function renderLots() {
 }
 $('#btn-new-lot').onclick = () => newLot();
 async function newLot(productId) {
-  if (!state.products.filter((p) => p.active).length) { toast('Add a product first', true); return show('products'); }
-  const opts = state.products.filter((p) => p.active).map((p) => `<option value="${p.id}" ${p.id === productId ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  if (!state.products.filter((p) => p.active && !p.components).length) { toast('Add a product first', true); return show('products'); }
+  const opts = state.products.filter((p) => p.active && !p.components).map((p) => `<option value="${p.id}" ${p.id === productId ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
   const v = await dialog('Log a batch', `
     <label>Product <select name="product_id">${opts}</select></label>
     <label>Made on <input name="made_at" type="date" value="${today()}" required></label>
