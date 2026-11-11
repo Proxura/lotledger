@@ -4,5 +4,12 @@
   "pages_build_output_dir": "public",
   "d1_databases": [
     { "binding": "DB", "database_name": "lotledger-db", "database_id": "3f2dba5d-36ef-497e-a743-71c163d5d157", "migrations_dir": "migrations" }
-  ]
+  ],
+  // Public values only. STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and APP_URL are
+  // Secrets set in the Cloudflare dashboard and never appear in this repo.
+  "vars": {
+    "STRIPE_PUBLISHABLE_KEY": "pk_live_51UYnDdRJngPBBQvYyv0ny7YlIv1A5GzV9eGMxD48RM7GvZXMb8zysjsc0K2CydWLjoH9JsrP4TaVnyphzxnsaXwR00c07oFoWd",
+    "STRIPE_PRICE_LIFETIME": "price_1UYoFiRJngPBBQvYLBxZDQb0",
+    "STRIPE_PRICE_MONTHLY": "price_1UYoGTRJngPBBQvYMDHT4vVz"
+  }
 }
