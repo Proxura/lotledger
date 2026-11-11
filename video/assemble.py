@@ -30,6 +30,21 @@ SCENES = [
     ('raw',  'account',  'end',      '$19 a month or $149 once. Free for 30 days, no card.'),
 ]
 
+VO_LINES = [
+    'You make small batches. If a customer asked which batch they got, could you tell them?',
+    'LotLedger puts every batch you make in one place.',
+    'Logging a batch takes about twenty seconds.',
+    'It numbers the lot and sets the best-by date for you.',
+    'Sold some? Record what went out.',
+    'The on-hand count stays right. Nothing to add up by hand.',
+    'Every unit is traced back to its lot. One tap when a customer asks.',
+    'Print a QR label. Scan it with your phone, and the lot opens.',
+    'Orders from Shopify or Etsy come in with one import.',
+    'One click gives you a file Pirate Ship imports straight in.',
+    'Nineteen dollars a month, or one forty-nine once. Free for thirty days, no card.',
+]
+assert len(VO_LINES) == len(SCENES)
+
 def marks(name):
     return dict((l, t) for t, l in json.loads((OUT / name).read_text()))
 M = {'raw': marks('marks.json'), 'scan': marks('scan-marks.json')}
@@ -51,7 +66,30 @@ segs = []
 for a, b in zip(cuts, cuts[1:]):
     if b - a > 0.4: segs.append((a, b))
 if len(segs) != len(SCENES):
-    sys.exit(f'voiceover split into {len(segs)} lines, expected {len(SCENES)}. Segments: {segs}')
+    # The voice pauses between sentences about as long as between paragraphs, so the split finds more
+    # pieces than lines. Group consecutive pieces into lines by matching each line's share of the
+    # spoken words, which is what the read time tracks. Dynamic programming over contiguous groups.
+    words = [len(v.split()) for v in VO_LINES]
+    speech = sum(b - a for a, b in segs)
+    want = [speech * w / sum(words) for w in words]
+    n, m = len(segs), len(SCENES)
+    if n < m: sys.exit(f'voiceover split into {n} pieces, fewer than {m} lines')
+    INF = float('inf')
+    best = [[INF] * (n + 1) for _ in range(m + 1)]; back = [[0] * (n + 1) for _ in range(m + 1)]
+    best[0][0] = 0.0
+    for i in range(1, m + 1):
+        for j in range(i, n + 1):
+            for k in range(i - 1, j):
+                if best[i - 1][k] == INF: continue
+                d = sum(b - a for a, b in segs[k:j])
+                c = best[i - 1][k] + (d - want[i - 1]) ** 2
+                if c < best[i][j]: best[i][j] = c; back[i][j] = k
+    groups, j = [], n
+    for i in range(m, 0, -1):
+        k = back[i][j]; groups.append(segs[k:j]); j = k
+    groups.reverse()
+    segs = [(g[0][0], g[-1][1]) for g in groups]
+    print(f'grouped {n} pieces into {m} lines by word share')
 print('voiceover lines:', [round(b - a, 2) for a, b in segs])
 
 # 2. Cut each scene, pad with its last frame to the length of its line (+ a beat).
