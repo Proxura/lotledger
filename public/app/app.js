@@ -36,7 +36,16 @@ async function boot() {
   if (!state.me.signedIn) return showAuth();
   $('#auth').hidden = true; $('#nav').hidden = false;
   $('#acct').hidden = false; $('#acct').textContent = `${state.me.account.name} · ${planLabel()}`;
-  if (new URLSearchParams(location.search).get('paid') === '1') { toast('Payment received. Thank you.'); history.replaceState(null, '', '/app/'); state.view = 'account'; setTimeout(async () => { state.me = await api('/api/me'); $('#acct').textContent = `${state.me.account.name} · ${planLabel()}`; renderAccount(); }, 2500); }
+  const q = new URLSearchParams(location.search);
+  if (q.get('paid') === '1') {
+    const sid = q.get('session_id') || '';
+    history.replaceState(null, '', '/app/'); state.view = 'account';
+    (async () => {
+      try { const r = await api(`/api/billing/confirm?session_id=${encodeURIComponent(sid)}`); toast(r.paid ? 'Payment received. Thank you.' : 'Payment is still processing. Refresh in a minute.'); }
+      catch (e) { toast(e.message, true); }
+      state.me = await api('/api/me'); $('#acct').textContent = `${state.me.account.name} · ${planLabel()}`; renderAccount();
+    })();
+  }
   await Promise.all([loadProducts(), loadLots()]);
   if (state.deepLot) { await show('scan'); $('#scan-form input[name=code]').value = state.deepLot; lookupCode(state.deepLot); return; }
   show(state.view);
