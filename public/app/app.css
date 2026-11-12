@@ -33,3 +33,5 @@ dialog h2{margin-top:0}.dlg-actions{display:flex;gap:.5rem;justify-content:flex-
 .btn-link{color:var(--accent,#6ee6c8);text-decoration:underline}
 input::placeholder{text-transform:none}
 .checkout-host{margin-top:.8rem;background:#fff;border-radius:12px;padding:.4rem;min-height:120px}
+
+.kv{display:grid;grid-template-columns:80px 1fr auto;gap:.5rem;align-items:center;margin:.4rem 0}.kv code{font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--panel,#0f1a16);padding:.35rem .5rem;border-radius:6px}#connections h3{font-size:1rem;margin:1.2rem 0 .3rem}

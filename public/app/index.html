@@ -100,6 +100,25 @@
         <button type="submit">Save</button>
       </form>
     </div>
+    <div class="card" id="connections">
+      <h2>Connections</h2>
+      <p class="muted small">Orders come in by themselves and your shop shows sold out by itself. Nothing here is a password, but the inbound link is a secret: anyone who has it can post orders into your account. Rotate it if it leaks.</p>
+      <h3>Orders in</h3>
+      <p class="muted small">Paste the link into your payment provider's webhook settings. Orders land here the moment they are paid and pack from your oldest lot.</p>
+      <div class="kv"><span>Stripe</span><code id="url-in-stripe"></code><button class="small" data-copy="url-in-stripe">Copy</button></div>
+      <p class="muted small">Stripe → Developers → Webhooks → Add destination → event <code>checkout.session.completed</code>. Stripe does not include line items in the event; either put them in the session's <code>metadata.items</code> ("2 x Lavender Bar Soap") or give LotLedger a restricted key below that can only read Checkout Sessions.</p>
+      <form id="stripe-key-form" class="row gap wrap"><label>Stripe restricted key (read Checkout Sessions only) <input name="stripe_read_key" placeholder="rk_live_..." autocomplete="off"></label><button type="submit">Save</button><span class="muted small" id="stripe-key-state"></span></form>
+      <div class="kv"><span>Shopify</span><code id="url-in-shopify"></code><button class="small" data-copy="url-in-shopify">Copy</button></div>
+      <p class="muted small">Shopify → Settings → Notifications → Webhooks → Create webhook → Event "Order payment", format JSON.</p>
+      <button class="small" id="btn-rotate-inbound">Rotate the inbound links</button>
+      <h3>Availability out</h3>
+      <p class="muted small">Your website reads this and shows available, sold out, or the next batch date. It never shows counts. Set each product's "Storefront id" to the id your site uses.</p>
+      <div class="kv"><span>Feed</span><code id="url-avail"></code><button class="small" data-copy="url-avail">Copy</button></div>
+      <h3>Batch pages</h3>
+      <p class="muted small">The QR on your labels opens a page like this for the customer: product, made date, best-by, what went in, and the line below.</p>
+      <form id="public-line-form" class="row gap wrap"><label>Made-by line <input name="public_line" maxlength="160" placeholder="Made by Four Waters in Saint Louis, Michigan"></label><button type="submit">Save</button></form>
+      <div class="kv"><span>Example</span><code id="url-lot-example"></code></div>
+    </div>
     <div class="card">
       <h2>Your data</h2>
       <div class="row gap wrap">

@@ -60,7 +60,7 @@ async function make() {
   const l = r.lot, n = Math.min(120, Math.max(1, Number($('#count').value) || 1));
   const px = $('#size').value === 'large' ? 150 : 84;
   const sheet = $('#sheet'); sheet.innerHTML = '';
-  const payload = location.origin + '/app/#lot=' + encodeURIComponent(l.code);
+  const payload = location.origin + '/l/' + me.account.public_token + '/' + encodeURIComponent(l.code);   // the customer page; the in-app scanner reads it too
   for (let i = 0; i < n; i++) {
     const el = document.createElement('div'); el.className = 'label';
     el.innerHTML = `<canvas></canvas><div><div class="code">${esc(l.code)}</div><div class="l">${esc(l.product_name)}${l.unit_size ? ' · ' + esc(l.unit_size) : ''}<br>Made ${fmt(l.made_at)}${l.best_by ? '<br>Best by ' + fmt(l.best_by) : ''}</div><div class="biz">${esc(me.account.name)}</div></div>`;

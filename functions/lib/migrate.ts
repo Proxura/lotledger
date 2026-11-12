@@ -36,7 +36,26 @@ const STEPS: Step[] = [
       if (!(await hasColumn(db, 'products', 'components'))) await db.prepare('alter table products add column components text').run();
     },
   },
+  {
+    version: 5, // migrations/0005_wiring.sql
+    apply: async (db) => {
+      for (const [t, col] of [['accounts', 'inbound_token text'], ['accounts', 'public_token text'], ['accounts', 'public_line text'], ['accounts', 'stripe_read_key text'], ['products', 'storefront_id text'], ['products', 'next_batch_at text'], ['orders', 'raw text'], ['orders', 'notes text']]) {
+        if (!(await hasColumn(db, t, col.split(' ')[0]))) await db.prepare(`alter table ${t} add column ${col}`).run();
+      }
+      // Every existing account gets its tokens so the URLs exist the first time someone looks.
+      const { results } = await db.prepare('select id from accounts where inbound_token is null or public_token is null').all<{ id: string }>();
+      for (const r of results) {
+        await db.prepare('update accounts set inbound_token = coalesce(inbound_token, ?1), public_token = coalesce(public_token, ?2) where id = ?3').bind(token(), token(), r.id).run();
+      }
+    },
+  },
 ];
+
+/** 32 hex chars from the platform RNG. */
+export function token(): string {
+  const b = new Uint8Array(16); crypto.getRandomValues(b);
+  return [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+}
 
 const LATEST = STEPS[STEPS.length - 1].version;
 let known = 0; // per-isolate cache; the row in app_meta is the truth

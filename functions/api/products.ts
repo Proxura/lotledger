@@ -1,4 +1,4 @@
-import { handle, json, requireSession, assertCanWrite, readJson, str, int, id, bad } from '../lib/core.ts';
+import { handle, json, requireSession, assertCanWrite, readJson, str, int, id, bad, isDate } from '../lib/core.ts';
 import { ensureSchema } from '../lib/migrate.ts';
 import { parseItems, matchProduct, type Product } from '../lib/pack.ts';
 
@@ -25,7 +25,7 @@ export const onRequestGet = handle(async (ctx) => {
   const s = await requireSession(ctx);
   await ensureSchema(ctx.env.DB);
   const { results } = await ctx.env.DB.prepare(
-    `select p.id, p.name, p.unit_label, p.shelf_life_days, p.active, p.components, p.sample,
+    `select p.id, p.name, p.unit_label, p.shelf_life_days, p.active, p.components, p.sample, p.storefront_id, p.next_batch_at,
             (select count(*) from lots l where l.product_id = p.id and l.status = 'active') as active_lots,
             (select coalesce(sum(l.units_made - l.units_out), 0) from lots l where l.product_id = p.id and l.status = 'active') as units_on_hand
        from products p where p.account_id = ?1 order by p.active desc, p.name`,
@@ -37,7 +37,7 @@ export const onRequestPost = handle(async (ctx) => {
   const s = await requireSession(ctx);
   assertCanWrite(s);
   await ensureSchema(ctx.env.DB);
-  const body = await readJson<{ name?: string; unit_label?: string; shelf_life_days?: number; kit?: string }>(ctx.request);
+  const body = await readJson<{ name?: string; unit_label?: string; shelf_life_days?: number; kit?: string; storefront_id?: string; next_batch_at?: string }>(ctx.request);
   const name = str(body.name, 120);
   if (!name) return bad('Give the product a name.');
   const unit = str(body.unit_label, 40) || 'unit';
@@ -46,8 +46,8 @@ export const onRequestPost = handle(async (ctx) => {
   const kit = await resolveKit(ctx.env.DB, s.account_id, null, typeof body.kit === 'string' ? body.kit : '');
   if ('error' in kit) return bad(kit.error);
   const pid = id();
-  await ctx.env.DB.prepare('insert into products (id, account_id, name, unit_label, shelf_life_days, components) values (?1, ?2, ?3, ?4, ?5, ?6)')
-    .bind(pid, s.account_id, name, unit, shelf, kit.json).run();
+  await ctx.env.DB.prepare('insert into products (id, account_id, name, unit_label, shelf_life_days, components, storefront_id, next_batch_at) values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)')
+    .bind(pid, s.account_id, name, unit, shelf, kit.json, str(body.storefront_id, 60) || null, (body.next_batch_at && isDate(body.next_batch_at)) ? body.next_batch_at : null).run();
   return json({ ok: true, id: pid }, 201);
 });
 
@@ -55,7 +55,7 @@ export const onRequestPatch = handle(async (ctx) => {
   const s = await requireSession(ctx);
   assertCanWrite(s);
   await ensureSchema(ctx.env.DB);
-  const body = await readJson<{ id?: string; name?: string; unit_label?: string; shelf_life_days?: number | null; active?: boolean; kit?: string }>(ctx.request);
+  const body = await readJson<{ id?: string; name?: string; unit_label?: string; shelf_life_days?: number | null; active?: boolean; kit?: string; storefront_id?: string; next_batch_at?: string }>(ctx.request);
   const pid = str(body.id, 64);
   if (!pid) return bad('Which product?');
   let kitJson: string | null | undefined;
@@ -75,9 +75,13 @@ export const onRequestPatch = handle(async (ctx) => {
   const res = await ctx.env.DB.prepare(
     `update products set name = coalesce(nullif(?1,''), name), unit_label = coalesce(nullif(?2,''), unit_label),
        shelf_life_days = case when ?3 = 1 then ?4 else shelf_life_days end, active = coalesce(?5, active),
-       components = case when ?8 = 1 then ?9 else components end
+       components = case when ?8 = 1 then ?9 else components end,
+       storefront_id = case when ?10 = 1 then ?11 else storefront_id end,
+       next_batch_at = case when ?12 = 1 then ?13 else next_batch_at end
      where id = ?6 and account_id = ?7`,
-  ).bind(name, unit, shelf === undefined ? 0 : 1, shelf ?? null, active, pid, s.account_id, kitJson === undefined ? 0 : 1, kitJson ?? null).run();
+  ).bind(name, unit, shelf === undefined ? 0 : 1, shelf ?? null, active, pid, s.account_id, kitJson === undefined ? 0 : 1, kitJson ?? null,
+    typeof body.storefront_id === 'string' ? 1 : 0, str(body.storefront_id, 60) || null,
+    typeof body.next_batch_at === 'string' ? 1 : 0, (body.next_batch_at && isDate(body.next_batch_at)) ? body.next_batch_at : null).run();
   if (!res.meta.changes) return bad('Product not found.', 404);
   return json({ ok: true });
 });

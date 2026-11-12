@@ -1,3 +1,4 @@
+import { ensureSchema, token } from '../../lib/migrate.ts';
 import { handle, readJson, bad, json, id, hashPassword, createSession, sessionCookie, addDays, nowIso, TRIAL_DAYS, SESSION_DAYS, str } from '../../lib/core.ts';
 
 export const onRequestPost = handle(async ({ request, env }) => {
@@ -10,12 +11,13 @@ export const onRequestPost = handle(async ({ request, env }) => {
   const existing = await env.DB.prepare('select id from users where email = ?1').bind(email).first();
   if (existing) return bad('That email already has an account. Sign in instead.', 409);
 
+  await ensureSchema(env.DB);
   const accountId = id();
   const userId = id();
   const prefix = business.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'LOT';
   await env.DB.batch([
-    env.DB.prepare('insert into accounts (id, name, plan, trial_ends_at, lot_prefix) values (?1, ?2, ?3, ?4, ?5)')
-      .bind(accountId, business, 'trial', addDays(nowIso(), TRIAL_DAYS), prefix),
+    env.DB.prepare('insert into accounts (id, name, plan, trial_ends_at, lot_prefix, inbound_token, public_token) values (?1, ?2, ?3, ?4, ?5, ?6, ?7)')
+      .bind(accountId, business, 'trial', addDays(nowIso(), TRIAL_DAYS), prefix, token(), token()),
     env.DB.prepare('insert into users (id, account_id, email, pw_hash) values (?1, ?2, ?3, ?4)')
       .bind(userId, accountId, email, await hashPassword(password)),
   ]);

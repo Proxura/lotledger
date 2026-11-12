@@ -112,6 +112,8 @@ const productFields = (p = {}) => `
   <label>Name <input name="name" required value="${esc(p.name || '')}" placeholder="Fresh Milled Flour"></label>
   <label>Unit (bag, jar, tube, loaf) <input name="unit_label" value="${esc(p.unit_label || 'unit')}"></label>
   <label>Shelf life in days (optional; fills best-by automatically) <input name="shelf_life_days" type="number" min="1" max="3650" value="${p.shelf_life_days ?? ''}"></label>
+  <label>Storefront id (optional). The id your website uses for this product, so the availability feed can match it <input name="storefront_id" maxlength="60" value="${esc(p.storefront_id || '')}"></label>
+  <label>Next batch date (optional). Shown on your site while this is sold out <input name="next_batch_at" type="date" value="${esc(p.next_batch_at || '')}"></label>
   <label>Kit contents (optional). One line per part, like "2 x Lavender Bar Soap". A kit has no lots of its own; packing one takes the parts from their lots. <textarea name="kit" rows="3" placeholder="2 x Lavender Bar Soap&#10;1 x Strawberry Jam">${esc(kitText(p))}</textarea></label>`;
 function kitText(p) {
   if (!p || !p.components) return '';
@@ -124,7 +126,7 @@ $('#btn-new-product').onclick = async () => {
 };
 async function editProduct(p) {
   const v = await dialog('Edit product', productFields(p) + `<label><span>Status</span><select name="active"><option value="1" ${p.active ? 'selected' : ''}>Active</option><option value="0" ${!p.active ? 'selected' : ''}>Archived</option></select></label>`); if (!v) return;
-  try { await api('/api/products', { method: 'PATCH', body: { id: p.id, name: v.name, unit_label: v.unit_label, shelf_life_days: v.shelf_life_days ? Number(v.shelf_life_days) : null, active: v.active === '1', kit: v.kit || '' } }); toast('Saved'); await loadProducts(); renderProducts(); } catch (e) { toast(e.message, true); }
+  try { await api('/api/products', { method: 'PATCH', body: { id: p.id, name: v.name, unit_label: v.unit_label, shelf_life_days: v.shelf_life_days ? Number(v.shelf_life_days) : null, active: v.active === '1', kit: v.kit || '', storefront_id: v.storefront_id || '', next_batch_at: v.next_batch_at || '' } }); toast('Saved'); await loadProducts(); renderProducts(); } catch (e) { toast(e.message, true); }
 }
 
 /* ---------- lots ---------- */
@@ -329,7 +331,22 @@ function renderAccount() {
   const a = state.me.account;
   $('#plan-line').textContent = a.plan === 'trial' ? `Free trial: ${planLabel()}. Everything you enter stays if the trial ends; adding new records needs a plan.` : `Current plan: ${a.plan}.`;
   const f = $('#acct-form'); f.name.value = a.name; f.lot_prefix.value = a.lot_prefix; f.lot_next.value = a.lot_next; f.lot_step.value = a.lot_step;
+  const o = location.origin;
+  $('#url-in-stripe').textContent = `${o}/api/in/stripe/${a.inbound_token}`;
+  $('#url-in-shopify').textContent = `${o}/api/in/shopify/${a.inbound_token}`;
+  $('#url-avail').textContent = `${o}/api/public/${a.public_token}/availability`;
+  const first = state.lots && state.lots[0];
+  $('#url-lot-example').textContent = `${o}/l/${a.public_token}/${first ? first.code : 'LOT1000'}`;
+  $('#public-line-form').public_line.value = a.public_line || '';
+  $('#stripe-key-state').textContent = a.has_stripe_read_key ? 'A key is saved. Paste a new one to replace it, or leave blank.' : 'No key saved.';
 }
+$$('[data-copy]').forEach((b) => (b.onclick = async () => { try { await navigator.clipboard.writeText($('#' + b.dataset.copy).textContent); toast('Copied'); } catch { toast('Select the link and copy it', true); } }));
+$('#btn-rotate-inbound').onclick = async () => {
+  if (!confirm('Rotate the inbound links? Every webhook that uses the old link stops working until you paste the new one.')) return;
+  try { const r = await api('/api/account', { method: 'PATCH', body: { rotate: 'inbound' } }); state.me.account = r.account; renderAccount(); toast('New links. Update Stripe and Shopify.'); } catch (e) { toast(e.message, true); }
+};
+$('#public-line-form').onsubmit = async (e) => { e.preventDefault(); try { const r = await api('/api/account', { method: 'PATCH', body: { public_line: e.target.public_line.value } }); state.me.account = r.account; toast('Saved'); } catch (err) { toast(err.message, true); } };
+$('#stripe-key-form').onsubmit = async (e) => { e.preventDefault(); const k = e.target.stripe_read_key.value; try { const r = await api('/api/account', { method: 'PATCH', body: { stripe_read_key: k } }); state.me.account = r.account; e.target.stripe_read_key.value = ''; renderAccount(); toast(k ? 'Key saved' : 'Key removed'); } catch (err) { toast(err.message, true); } };
 $('#acct-form').onsubmit = async (e) => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); try { const r = await api('/api/account', { method: 'PATCH', body: { ...v, lot_next: Number(v.lot_next), lot_step: Number(v.lot_step) } }); state.me.account = r.account; toast('Saved'); $('#acct').textContent = `${r.account.name} · ${planLabel()}`; } catch (err) { toast(err.message, true); } };
 let stripeJs = null, embedded = null;
 function loadStripeJs() {

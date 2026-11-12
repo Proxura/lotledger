@@ -26,5 +26,7 @@ export function normalizeScanned(raw: string): string {
   let t = raw.trim();
   const m = t.match(/[#?&]lot=([^&#\s]+)/i);
   if (m) t = decodeURIComponent(m[1]);
+  const pub = t.match(/\/l\/[a-f0-9]{32}\/([^/?#\s]+)/i);   // the public page URL printed on labels
+  if (pub) t = decodeURIComponent(pub[1]);
   return t.trim().toUpperCase();
 }
