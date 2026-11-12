@@ -17,7 +17,7 @@ export const onRequestPost = handle(async (ctx) => {
   if (!price) return bad('Pick lifetime or monthly.');
   const appUrl = env.APP_URL || new URL(ctx.request.url).origin;
   const form = new URLSearchParams({
-    ui_mode: 'embedded',
+    ui_mode: 'embedded_page',
     mode: plan === 'lifetime' ? 'payment' : 'subscription',
     'line_items[0][price]': price,
     'line_items[0][quantity]': '1',
