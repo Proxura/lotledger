@@ -1,4 +1,4 @@
-import { json, id, str } from '../../../lib/core.ts';
+import { json, id, str, canConnect } from '../../../lib/core.ts';
 import { ensureSchema } from '../../../lib/migrate.ts';
 import { packOrder } from '../../../lib/packOrder.ts';
 
@@ -18,8 +18,10 @@ export async function onRequestPost(ctx: Ctx): Promise<Response> {
   if (source !== 'stripe' && source !== 'shopify') return json({ error: 'Unknown source.' }, 404);
   if (!/^[a-f0-9]{32}$/.test(params.token)) return json({ error: 'Not found.' }, 404);
   await ensureSchema(env.DB);
-  const acct = await env.DB.prepare('select id, stripe_read_key from accounts where inbound_token = ?1').bind(params.token).first<{ id: string; stripe_read_key: string | null }>();
+  const acct = await env.DB.prepare('select id, plan, trial_ends_at, stripe_read_key from accounts where inbound_token = ?1').bind(params.token).first<{ id: string; plan: string; trial_ends_at: string; stripe_read_key: string | null }>();
   if (!acct) return json({ error: 'Not found.' }, 404);
+  // 402 on purpose: the sender shows a failed delivery, which is how the merchant finds out, and retries once the plan is on.
+  if (!canConnect(acct.plan, acct.trial_ends_at)) return json({ error: 'Orders by webhook are part of the Connected plan. Turn it on under Account in LotLedger.' }, 402);
   const rawText = await request.text();
   let payload: any;
   try { payload = JSON.parse(rawText); } catch { return json({ error: 'Body is not JSON.' }, 400); }

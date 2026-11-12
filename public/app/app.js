@@ -329,8 +329,9 @@ $('#btn-pirate').onclick = async () => {
 /* ---------- account ---------- */
 function renderAccount() {
   const a = state.me.account;
-  $('#plan-line').textContent = a.plan === 'trial' ? `Free trial: ${planLabel()}. Everything you enter stays if the trial ends; adding new records needs a plan.` : `Current plan: ${a.plan}.`;
+  $('#plan-line').textContent = a.plan === 'trial' ? `Free trial: ${planLabel()}. Everything you enter stays if the trial ends; adding new records needs a plan.` : `Current plan: ${({ lifetime: 'Solo lifetime', monthly: 'Solo', connected: 'Connected', house: 'Connected (house account)', free: 'ended, read-only' })[a.plan] || a.plan}.`;
   const f = $('#acct-form'); f.name.value = a.name; f.lot_prefix.value = a.lot_prefix; f.lot_next.value = a.lot_next; f.lot_step.value = a.lot_step;
+  $('#connect-gate').hidden = ['connected', 'house', 'trial'].includes(a.plan);
   const o = location.origin;
   $('#url-in-stripe').textContent = `${o}/api/in/stripe/${a.inbound_token}`;
   $('#url-in-shopify').textContent = `${o}/api/in/shopify/${a.inbound_token}`;
@@ -362,7 +363,7 @@ async function openCheckout(plan) {
     await loadStripeJs();
     const r = await api('/api/billing/checkout', { method: 'POST', body: { plan } });
     if (embedded) { embedded.destroy(); embedded = null; }
-    $('#checkout-title').textContent = plan === 'lifetime' ? 'LotLedger Lifetime, $149 once' : 'LotLedger Monthly, $19 a month';
+    $('#checkout-title').textContent = plan === 'lifetime' ? 'LotLedger Solo lifetime, $149 once' : plan === 'connected' ? 'LotLedger Connected, $39 a month' : 'LotLedger Solo, $19 a month';
     $('#checkout-wrap').hidden = false;
     const stripe = Stripe(cfg.publishableKey);
     embedded = await stripe.initEmbeddedCheckout({ clientSecret: r.clientSecret });

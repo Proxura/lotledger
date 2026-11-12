@@ -124,7 +124,7 @@ ${p.pains.map(([h, t]) => `  <div class="card"><h2>${h}</h2><p class="muted">${t
 </section>
 <section>
   <h2>Pricing</h2>
-  <p class="muted">$19 a month, or $149 once for a year of hosting and support (then $5 a month). Both start with 30 free days and no card. <a href="${CTA}">Start free</a>.</p>
+  <p class="muted">Solo is $19 a month, or $149 once for a year of hosting and support (then $5 a month). Connected is $39 a month and wires LotLedger to your Stripe or Shopify orders and your website. Every plan starts with 30 free days and no card. <a href="${CTA}">Start free</a>.</p>
 </section>
 <footer>LotLedger is a product of Proxura LLC, Michigan. <a href="/">Home</a> · <a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a> · theforemans2002+lotledger@gmail.com</footer>
 </main>

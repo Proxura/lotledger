@@ -1,4 +1,4 @@
-import { handle, json, bad } from '../../lib/core.ts';
+import { handle, json, bad, planFromMeta } from '../../lib/core.ts';
 
 /** Stripe webhook: checkout.session.completed flips the account to lifetime or monthly;
  *  customer.subscription.deleted drops a monthly account back to free (read-only). */
@@ -11,14 +11,14 @@ export const onRequestPost = handle(async ({ request, env }) => {
   const obj = event.data.object;
   if (event.type === 'checkout.session.completed') {
     const accountId = obj.client_reference_id || obj.metadata?.account_id;
-    const plan = obj.metadata?.plan === 'monthly' ? 'monthly' : 'lifetime';
+    const plan = planFromMeta(obj.metadata?.plan);
     if (accountId) {
       await env.DB.prepare('update accounts set plan = ?1, stripe_customer_id = coalesce(?2, stripe_customer_id) where id = ?3')
         .bind(plan, typeof obj.customer === 'string' ? obj.customer : null, accountId).run();
     }
   } else if (event.type === 'customer.subscription.deleted') {
     const accountId = obj.metadata?.account_id;
-    if (accountId) await env.DB.prepare("update accounts set plan = 'free' where id = ?1 and plan = 'monthly'").bind(accountId).run();
+    if (accountId) await env.DB.prepare("update accounts set plan = 'free' where id = ?1 and plan in ('monthly', 'connected')").bind(accountId).run();
   }
   return json({ received: true });
 });

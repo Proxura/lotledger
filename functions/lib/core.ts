@@ -6,7 +6,8 @@ export interface Env {
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PRICE_LIFETIME?: string;   // one-time $149
   STRIPE_PRICE_MONTHLY?: string;    // $19/mo
-  STRIPE_PUBLISHABLE_KEY?: string;  // pk_..., public, mounts embedded Checkout
+  STRIPE_PUBLISHABLE_KEY?: string;
+  STRIPE_PRICE_CONNECTED?: string;  // pk_..., public, mounts embedded Checkout
   APP_URL?: string;                 // https://lotledger.pages.dev or the custom domain
 }
 
@@ -134,7 +135,19 @@ export async function requireSession(ctx: Ctx): Promise<Session> {
 }
 
 /** Trial expired and not on a paid plan: reads still work, writes are refused. */
+/** Plans: trial (everything, 30 days) | lifetime, monthly (Solo) | connected (Solo + wiring) | house (ours) | free (read-only).
+ *  Wiring = orders in by webhook and the availability feed. Batch pages work on every plan, always:
+ *  a QR already printed on a jar must never stop opening. */
+export function canConnect(plan: string, trialEndsAt: string): boolean {
+  return plan === 'connected' || plan === 'house' || (plan === 'trial' && trialEndsAt >= nowIso());
+}
+export const PAID_PLANS = ['lifetime', 'monthly', 'connected'] as const;
+export const planFromMeta = (v: unknown): 'lifetime' | 'monthly' | 'connected' => (v === 'monthly' || v === 'connected' ? v : 'lifetime');
+
 export function assertCanWrite(s: Session): void {
+  if (s.plan === 'free') {
+    throw new HttpError('Your plan has ended. Choose a plan under Account to keep adding records. Everything you entered is still here and still exports.', 402);
+  }
   if (s.plan === 'trial' && s.trial_ends_at < nowIso()) {
     throw new HttpError('Your free trial has ended. Choose a plan under Account to keep adding records. Everything you entered is still here and still exports.', 402);
   }

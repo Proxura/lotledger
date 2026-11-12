@@ -81,10 +81,11 @@
       <h2>Plan</h2>
       <p id="plan-line"></p>
       <div class="row gap wrap">
-        <button class="primary" data-plan="lifetime">Lifetime, $149 once</button>
-        <button data-plan="monthly">Monthly, $19</button>
+        <button class="primary" data-plan="connected">Connected, $39 a month</button>
+        <button data-plan="monthly">Solo, $19 a month</button>
+        <button data-plan="lifetime">Solo lifetime, $149 once</button>
       </div>
-      <p class="muted small">Lifetime includes hosting and support for a year, then $5/month to keep it hosted. Both include email support from the maker.</p>
+      <p class="muted small">Solo is the batch record: lots, best-by, scanning, labels, batch pages for your customers, shipping export. Connected adds the wiring under Connections: orders arrive from Stripe and Shopify by themselves and pack from your oldest lot, and your website reads what is sold out. Solo lifetime includes hosting and support for a year, then $5 a month. Every plan includes email support from the maker.</p>
       <div id="checkout-wrap" hidden>
         <div class="row between"><p class="muted small" id="checkout-title"></p><button class="small" id="btn-checkout-close">Close</button></div>
         <div id="checkout-host" class="checkout-host"></div>
@@ -102,6 +103,7 @@
     </div>
     <div class="card" id="connections">
       <h2>Connections</h2>
+      <p id="connect-gate" class="err" hidden>These links are part of the Connected plan. They work during your trial; after it, they need Connected.</p>
       <p class="muted small">Orders come in by themselves and your shop shows sold out by itself. Nothing here is a password, but the inbound link is a secret: anyone who has it can post orders into your account. Rotate it if it leaks.</p>
       <h3>Orders in</h3>
       <p class="muted small">Paste the link into your payment provider's webhook settings. Orders land here the moment they are paid and pack from your oldest lot.</p>

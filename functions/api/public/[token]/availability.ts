@@ -1,4 +1,4 @@
-import { json } from '../../../lib/core.ts';
+import { json, canConnect } from '../../../lib/core.ts';
 import { ensureSchema } from '../../../lib/migrate.ts';
 
 /** Public, read-only. A storefront reads this to show available / sold out / next batch per product.
@@ -16,8 +16,9 @@ export async function onRequestOptions(): Promise<Response> { return new Respons
 export async function onRequestGet(ctx: Ctx): Promise<Response> {
   if (!/^[a-f0-9]{32}$/.test(ctx.params.token)) return json({ error: 'Not found.' }, 404, CORS);
   await ensureSchema(ctx.env.DB);
-  const acct = await ctx.env.DB.prepare('select id, name from accounts where public_token = ?1').bind(ctx.params.token).first<{ id: string; name: string }>();
+  const acct = await ctx.env.DB.prepare('select id, name, plan, trial_ends_at from accounts where public_token = ?1').bind(ctx.params.token).first<{ id: string; name: string; plan: string; trial_ends_at: string }>();
   if (!acct) return json({ error: 'Not found.' }, 404, CORS);
+  if (!canConnect(acct.plan, acct.trial_ends_at)) return json({ error: 'The availability feed is part of the Connected plan.' }, 402, CORS);
   const { results } = await ctx.env.DB.prepare(
     `select p.id, p.name, p.storefront_id, p.next_batch_at,
             (select count(*) from lots l where l.product_id = p.id and l.status = 'active' and l.units_out < l.units_made) as live_lots
